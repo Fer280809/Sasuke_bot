@@ -1,3 +1,4 @@
+
 process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '1'
 import './settings.js'
 import './plugins/_allfake.js'
@@ -156,7 +157,7 @@ global.loadDatabase = async function loadDatabase() {
   global.db.data.gacha = global.db.data.gacha || { 
     personajes: [], 
     probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } 
-  },
+  }
   global.db.data.config = global.db.data.config || { 
     prefix: '!', 
     owner: '5214181450063', 
@@ -281,53 +282,69 @@ if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
   if (opcion === '2' || methodCode) {
     opcion = '2'
     if (!conn.authState.creds.registered) {
-      let addNumber
+      let addNumber;
       
       if (!!phoneNumber) {
-        addNumber = phoneNumber.replace(/[^0-9]/g, '')
+        addNumber = phoneNumber.replace(/[^0-9]/g, '');
         if (addNumber.startsWith('52') && addNumber.length === 12) {
-          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'))
-          addNumber = '521' + addNumber.substring(2)
-          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`))
+          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'));
+          addNumber = '521' + addNumber.substring(2);
+          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`));
         }
       } else {
-        let validNumber = false
+        let validNumber = false;
         do {
-          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)))
+          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)));
 
-          phoneNumber = phoneNumber.replace(/\D/g, '').trim()
-          console.log(chalk.gray(`Procesando: ${phoneNumber}`))
+          phoneNumber = phoneNumber.replace(/\D/g, '').trim();
+          console.log(chalk.gray(`Procesando: ${phoneNumber}`));
 
-          const result = await isValidPhoneNumber(phoneNumber)
+          const result = await isValidPhoneNumber(phoneNumber);
           if (result) {
-            addNumber = result
-            validNumber = true
-            console.log(chalk.bold.green(`✅ Número aceptado: ${addNumber}`))
+            addNumber = result;
+            validNumber = true;
+            console.log(chalk.bold.green(`✅ Número aceptado: ${addNumber}`));
           } else {
-            console.log(chalk.red('❌ Intenta nuevamente\n'))
+            console.log(chalk.red('❌ Intenta nuevamente\n'));
           }
-        } while (!validNumber)
+        } while (!validNumber);
 
-        rl.close()
+        rl.close();
       }
 
-      console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`))
+      // Formatear el número con phoneUtil
+      try {
+        const parsedNumber = phoneUtil.parse(`+${addNumber}`, null);
+        addNumber = phoneUtil.format(parsedNumber, pkg.PhoneNumberFormat.E164);
+        console.log(chalk.green(`✓ Número formateado: ${addNumber}`));
+      } catch (error) {
+        console.error(chalk.red('❌ Error al formatear el número:'), error.message);
+        console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'));
+        return; // Salir si no se puede formatear el número
+      }
+
+      console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`));
 
       setTimeout(async () => {
         try {
-          let codeBot = await conn.requestPairingCode(addNumber)
-          codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
-          console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)))
-          console.log(chalk.cyan(`💡 Pasos para vincular:`))
-          console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`))
-          console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`))
-          console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`))
-          console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`))
+          // Escuchar el evento 'auth-code-request' (si existe)
+          conn.ev.on('auth-code-request', async () => {
+            console.log(chalk.cyan('✓ Solicitud de código de autenticación recibida'));
+          });
+
+          let codeBot = await conn.requestPairingCode(addNumber);
+          codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot;
+          console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)));
+          console.log(chalk.cyan(`💡 Pasos para vincular:`));
+          console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`));
+          console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`));
+          console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`));
+          console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`));
         } catch (error) {
-          console.error(chalk.red('❌ Error al solicitar código:'), error.message)
-          console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'))
+          console.error(chalk.red('❌ Error al solicitar código:'), error.message);
+          console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'));
         }
-      }, 3000)
+      }, 3000);
     }
   }
 }
@@ -553,72 +570,3 @@ global.reload = async (_ev, filename) => {
       break
     }
   }
-
-  if (!dir) return
-
-  if (filename in global.plugins) {
-    if (existsSync(dir)) {
-      console.log(chalk.yellow(`♻ Recargando plugin: ${filename}`))
-      try {
-        const module = await import(`${dir}?update=${Date.now()}`)
-        global.plugins[filename] = module.default || module
-        console.log(chalk.green(`✓ Plugin recargado: ${filename}`))
-      } catch (e) {
-        console.error(chalk.red(`❌ Error al recargar ${filename}:`), e)
-        delete global.plugins[filename]
-      }
-    } else {
-      console.log(chalk.red(`🗑 Plugin eliminado: ${filename}`))
-      delete global.plugins[filename]
-    }
-  } else {
-    console.log(chalk.blue(`➕ Nuevo plugin detectado: ${filename}`))
-    try {
-      const module = await import(`${dir}?update=${Date.now()}`)
-      global.plugins[filename] = module.default || module
-      console.log(chalk.green(`✓ Plugin cargado: ${filename}`))
-    } catch (e) {
-      console.error(chalk.red(`❌ Error al cargar ${filename}:`), e)
-    }
-  }
-}
-
-// Watcher de plugins
-for (const folder of pluginFolders) {
-  const pluginPath = join(__dirname, folder)
-  if (existsSync(pluginPath)) {
-    watch(pluginPath, async (eventType, filename) => {
-      if (filename) {
-        await global.reload(null, filename)
-      }
-    })
-  }
-}
-
-// Inicialización final
-async function startBot() {
-  if (!handler || !handler.handler) {
-    console.error(chalk.red('❌ Error: handler no disponible'))
-    return
-  }
-
-  try {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-    conn.ev.off('creds.update', conn.credsUpdate)
-  } catch {}
-
-  conn.handler = handler.handler.bind(global.conn)
-  conn.connectionUpdate = connectionUpdate.bind(global.conn)
-  conn.credsUpdate = saveCreds.bind(global.conn, true)
-
-  conn.ev.on('messages.upsert', conn.handler)
-  conn.ev.on('connection.update', conn.connectionUpdate)
-  conn.ev.on('creds.update', conn.credsUpdate)
-
-  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
-}
-
-startBot().catch(console.error)
-
-      
