@@ -20,7 +20,7 @@ import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
 import { JSONFile } from 'lowdb/node'
 import { proto } from '@whiskeysockets/baileys'
-// ARREGLADO: Importación de google-libphonenumber (CommonJS)
+// Importación de google-libphonenumber (CommonJS)
 import pkgPhone from 'google-libphonenumber'
 const { PhoneNumberUtil } = pkgPhone
 import { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } from '@whiskeysockets/baileys'
@@ -34,11 +34,19 @@ const PORT = process.env.PORT || 3000
 const sessions = 'Sessions/Principal'
 const jadi = 'jadi'
 const phoneUtil = PhoneNumberUtil.getInstance()
+const DEFAULT_REGION = 'MX' // Región por defecto: México
 
-// Función de validación de números (simplificada)
+// ARREGLADO: Función de validación flexible para números mexicanos
 async function isValidPhoneNumber(phoneNumber) {
   try {
-    const number = phoneUtil.parseAndKeepRawInput(phoneNumber)
+    // Eliminamos todo lo que no sea número
+    const cleanNumber = phoneNumber.replace(/\D/g, '')
+    // Para México: aceptamos con o sin el 1 intermedio (ej: 52418... o 521418...)
+    const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : 
+                            cleanNumber.startsWith('52') ? `521${cleanNumber.slice(2)}` : 
+                            cleanNumber
+    
+    const number = phoneUtil.parseAndKeepRawInput(normalizedNumber, DEFAULT_REGION)
     return phoneUtil.isValidNumber(number)
   } catch {
     return false
@@ -71,7 +79,7 @@ const dbAdapter = /https?:\/\//.test(opts.db || '') ? new cloudDBAdapter(opts.db
 const defaultDBData = {
   users: {}, chats: {}, settings: {},
   gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
-  config: { prefix: '!', owner: '521xxxxxxxxx', botName: 'Sasuke Bot' } // CAMBIA TU NÚMERO AQUÍ
+  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // PON TU NÚMERO AQUÍ (CON 1)
 }
 
 global.db = new Low(dbAdapter, defaultDBData)
@@ -129,19 +137,37 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// Proceso de código de paring (simplificada)
+// ARREGLADO: Proceso de código de paring - ahora espera a que la conexión esté lista
 if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
   if (!conn.authState.creds.registered) {
+    // Pedimos el número primero
     do {
-      phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número (+prefijo): `)))
-      phoneNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber.replace(/\D/g, '')}`
+      phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número (ej: 524181450063 o 5214181450063): `)))
     } while (!await isValidPhoneNumber(phoneNumber))
     rl.close()
 
-    setTimeout(async () => {
-      const codeBot = await conn.requestPairingCode(phoneNumber.replace(/\D/g, ''))
+    // Esperamos a que la conexión esté lista antes de pedir el código
+    const waitForConnection = () => new Promise(resolve => {
+      const interval = setInterval(() => {
+        if (conn.ws.readyState === ws.OPEN) {
+          clearInterval(interval)
+          resolve()
+        }
+      }, 500)
+    })
+
+    console.log(chalk.yellow(`[ ⏳ ] Esperando conexión con WhatsApp...`))
+    await waitForConnection()
+
+    try {
+      const cleanNumber = phoneNumber.replace(/\D/g, '')
+      const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : `521${cleanNumber.slice(2)}`
+      const codeBot = await conn.requestPairingCode(normalizedNumber)
       console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] Código Sasuke: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
-    }, 3000)
+    } catch (e) {
+      console.error(chalk.red(`⚠ Error al pedir el código: ${e.message}`))
+      console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) si el problema persiste`))
+    }
   }
 }
 
@@ -244,13 +270,15 @@ async function filesInit() {
     const files = fs.readdirSync(folderPath).filter(pluginFilter)
     for (const file of files) {
       try {
-        global.plugins[file] = await import(path.join(folderPath, file))
+        // ARREGLADO: Importación de plugins (soluciona el "0 cargados")
+        const module = await import(path.resolve(folderPath, file))
+        global.plugins[file] = module.default || module
         total++
       } catch (e) {
         console.error(chalk.red(`❌ ${folder}/${file}: ${e.message}`))
       }
     }
-    console.log(chalk.green(`✓ ${folder}: ${files.length} plugins (${Object.keys(global.plugins).filter(k => k in files).length} cargados)`))
+    console.log(chalk.green(`✓ ${folder}: ${files.length} plugins (${Object.keys(global.plugins).filter(k => files.includes(k)).length} cargados)`))
   }
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
@@ -258,5 +286,5 @@ async function filesInit() {
   console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
 }
 
-// Llamada a la función de carga de plugins (MÁS IMPORTANTE DE TODO)
+// Llamada a la función de carga de plugins
 filesInit()
