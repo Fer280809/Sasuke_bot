@@ -1,4 +1,4 @@
-process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '1'
+process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'
 import './settings.js'
 import './plugins/_allfake.js'
 import cfonts from 'cfonts'
@@ -111,16 +111,13 @@ const defaultData = {
 // Crear adaptador según versión de lowdb
 let adapter
 try {
-  // lowdb v6+ requiere pasar defaultData en el constructor
   adapter = new JSONFile(dbPath)
   global.db = new Low(adapter, defaultData)
 } catch (error) {
-  // Fallback para versiones anteriores
   try {
     adapter = new JSONFileSync(dbPath)
     global.db = new Low(adapter)
   } catch {
-    // Si todo falla, usar adaptador simple
     adapter = new JSONFileSync(dbPath)
     global.db = { data: defaultData, read: async () => {}, write: async () => {} }
   }
@@ -139,16 +136,15 @@ global.loadDatabase = async function loadDatabase() {
   }
   if (global.db.data !== null) return
   global.db.READ = true
-  
+
   try {
     await global.db.read()
   } catch (error) {
     console.log(chalk.yellow('⚠ Creando nueva base de datos...'))
   }
-  
+
   global.db.READ = null
-  
-  // Asegurar que existan todos los datos por defecto
+
   global.db.data = global.db.data || defaultData
   global.db.data.users = global.db.data.users || {}
   global.db.data.chats = global.db.data.chats || {}
@@ -162,10 +158,9 @@ global.loadDatabase = async function loadDatabase() {
     owner: '5214181450063', 
     botName: 'Sasuke Bot' 
   }
-  
+
   global.db.chain = chain(global.db.data)
-  
-  // Guardar datos iniciales
+
   try {
     await global.db.write()
     console.log(chalk.green('✓ Base de datos inicializada'))
@@ -189,55 +184,80 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (texto) => new Promise((resolver) => rl.question(texto, resolver))
 let opcion
 
-// Función de validación y corrección de teléfono
-async function isValidPhoneNumber(number) {
-  try {
-    // Limpiar el número
-    let cleanNumber = number.replace(/\D/g, '')
-    
-    // Caso 1: Número mexicano con 52 + 10 dígitos (falta el 1)
-    // Ejemplo: 524181450063 -> 5214181450063
-    if (cleanNumber.match(/^52[0-9]{10}$/)) {
-      console.log(chalk.yellow('⚠ Formato: 52 + 10 dígitos detectado'))
-      cleanNumber = '521' + cleanNumber.substring(2)
-      console.log(chalk.green(`✓ Número corregido a: +${cleanNumber}`))
-      return '+' + cleanNumber
-    }
-    
-    // Caso 2: Número mexicano con 521 + 10 dígitos (correcto)
-    // Ejemplo: 5214181450063
-    if (cleanNumber.match(/^521[0-9]{10}$/)) {
-      console.log(chalk.green(`✓ Formato correcto detectado: +${cleanNumber}`))
-      return '+' + cleanNumber
-    }
-    
-    // Caso 3: Otros países - validar con la librería
-    const parsedNumber = phoneUtil.parse('+' + cleanNumber, null)
-    if (phoneUtil.isValidNumber(parsedNumber)) {
-      console.log(chalk.green(`✓ Número válido: +${cleanNumber}`))
-      return '+' + cleanNumber
-    }
-    
-    console.log(chalk.red(`❌ Número no reconocido. Formato esperado:`))
-    console.log(chalk.cyan(`   México: 5214181450063 (52 + 1 + 10 dígitos)`))
-    console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos, se agregará el 1)`))
-    return false
-    
-  } catch (e) {
-    console.log(chalk.red(`❌ Error: ${e.message}`))
-    return false
+// Función de validación y corrección de teléfono MEJORADA
+function cleanPhoneNumber(number) {
+  return number.replace(/[^0-9]/g, '').trim()
+}
+
+function isValidMexicanNumber(cleanNumber) {
+  // Formato correcto: 521 + 10 dígitos
+  if (cleanNumber.match(/^521[0-9]{10}$/)) {
+    return { valid: true, formatted: cleanNumber, needsFix: false }
   }
+  
+  // Formato incorrecto pero corregible: 52 + 10 dígitos (falta el 1)
+  if (cleanNumber.match(/^52[2-9][0-9]{9}$/)) {
+    const fixed = '521' + cleanNumber.substring(2)
+    return { valid: true, formatted: fixed, needsFix: true }
+  }
+  
+  return { valid: false }
+}
+
+async function validateAndFormatPhone(number) {
+  const cleaned = cleanPhoneNumber(number)
+  
+  console.log(chalk.gray(`📱 Número ingresado: ${cleaned}`))
+  
+  // Validar número mexicano
+  const mexValidation = isValidMexicanNumber(cleaned)
+  if (mexValidation.valid) {
+    if (mexValidation.needsFix) {
+      console.log(chalk.yellow(`⚠️  Formato detectado: 52 + 10 dígitos`))
+      console.log(chalk.green(`✅ Número corregido: ${mexValidation.formatted}`))
+    } else {
+      console.log(chalk.green(`✅ Formato correcto: ${mexValidation.formatted}`))
+    }
+    return mexValidation.formatted
+  }
+  
+  // Validar con google-libphonenumber para otros países
+  try {
+    const parsedNumber = phoneUtil.parse('+' + cleaned, null)
+    if (phoneUtil.isValidNumber(parsedNumber)) {
+      console.log(chalk.green(`✅ Número internacional válido: ${cleaned}`))
+      return cleaned
+    }
+  } catch (e) {
+    // Continuar al error
+  }
+  
+  // Número inválido
+  console.log(chalk.red(`\n❌ Número inválido`))
+  console.log(chalk.cyan(`\n📋 Formatos aceptados para México:`))
+  console.log(chalk.white(`   • 5214181450063 (Correcto: 52 + 1 + 10 dígitos)`))
+  console.log(chalk.white(`   • 524181450063 (Se corregirá automáticamente)`))
+  console.log(chalk.cyan(`\n📋 Para otros países:`))
+  console.log(chalk.white(`   • Código de país + número completo`))
+  console.log(chalk.white(`   • Ejemplo USA: 1234567890\n`))
+  
+  return null
 }
 
 // Selección de método
 if (methodCodeQR) {
   opcion = '1'
 }
+
 if (!methodCodeQR && !methodCode && !fs.existsSync(`./${global.sessions}/creds.json`)) {
   do {
-    opcion = await question(chalk.bold.white("Seleccione una opción:\n") + chalk.blueBright("1. Con código QR\n") + chalk.cyan("2. Con código de 8 dígitos\n━━━> "))
+    opcion = await question(chalk.bold.white("\n╔═══════════════════════════════════╗\n║  Seleccione método de conexión:  ║\n╚═══════════════════════════════════╝\n") + 
+      chalk.blueBright("1. 📱 Con código QR (escanear)\n") + 
+      chalk.cyan("2. 🔢 Con código de 8 dígitos\n") + 
+      chalk.magentaBright("━━━> "))
+    
     if (!/^[1-2]$/.test(opcion)) {
-      console.log(chalk.bold.redBright(`❌ No se permiten números que no sean 1 o 2`))
+      console.log(chalk.bold.redBright(`\n❌ Opción inválida. Ingrese 1 o 2\n`))
     }
   } while (opcion !== '1' && opcion !== '2' || fs.existsSync(`./${global.sessions}/creds.json`))
 }
@@ -276,70 +296,96 @@ const connectionOptions = {
 }
 
 global.conn = makeWASocket(connectionOptions)
-conn.ev.on("creds.update", saveCreds)
+conn.isInit = false
+conn.well = false
 
-// Proceso de código de 8 dígitos
+// Proceso de código de 8 dígitos MEJORADO
 if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
   if (opcion === '2' || methodCode) {
     opcion = '2'
+    
     if (!conn.authState.creds.registered) {
-      let addNumber
+      let formattedNumber
+      
       if (!!phoneNumber) {
-        addNumber = phoneNumber.replace(/[^0-9]/g, '')
-        // Verificar si es mexicano y agregar el 1
-        if (addNumber.startsWith('52') && addNumber.length === 12) {
-          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'))
-          addNumber = '521' + addNumber.substring(2)
-          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`))
+        // Si ya viene definido en settings o argumentos
+        formattedNumber = await validateAndFormatPhone(phoneNumber)
+        if (!formattedNumber) {
+          console.log(chalk.red('❌ Número predefinido inválido. Solicite uno manualmente.'))
+          phoneNumber = null
         }
-      } else {
+      }
+      
+      if (!phoneNumber || !formattedNumber) {
+        // Solicitar número al usuario
         let validNumber = false
+        
+        console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
+        console.log(chalk.bold.red(`║    VINCULACIÓN POR CÓDIGO         ║`))
+        console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
+        
         do {
-          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)))
+          phoneNumber = await question(chalk.bold.cyan(`\n📱 Ingrese su número de WhatsApp:\n`) + 
+            chalk.gray(`   (Ejemplo México: 5214181450063 o 524181450063)\n`) +
+            chalk.magentaBright(`━━━> `))
           
-          // Limpiar entrada
-          phoneNumber = phoneNumber.replace(/\D/g, '').trim()
+          formattedNumber = await validateAndFormatPhone(phoneNumber)
           
-          console.log(chalk.gray(`Procesando: ${phoneNumber}`))
-          
-          // Validar y corregir
-          const result = await isValidPhoneNumber(phoneNumber)
-          if (result) {
-            phoneNumber = result
+          if (formattedNumber) {
             validNumber = true
-            console.log(chalk.bold.green(`✅ Número aceptado: ${phoneNumber}`))
+            console.log(chalk.bold.green(`\n✅ Número aceptado: +${formattedNumber}\n`))
           } else {
-            console.log(chalk.red('❌ Intenta nuevamente\n'))
+            console.log(chalk.yellow(`\n⚠️  Intente nuevamente...\n`))
           }
         } while (!validNumber)
         
         rl.close()
-        addNumber = phoneNumber.replace(/\D/g, '')
-        
-        console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`))
-        
-        setTimeout(async () => {
-          try {
-            let codeBot = await conn.requestPairingCode(addNumber)
-            codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
-            console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)))
-            console.log(chalk.cyan(`💡 Pasos para vincular:`))
-            console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`))
-            console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`))
-            console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`))
-            console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`))
-          } catch (error) {
-            console.error(chalk.red('❌ Error al solicitar código:'), error.message)
-            console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'))
-          }
-        }, 3000)
       }
+      
+      console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento...`))
+      console.log(chalk.gray(`   Número: +${formattedNumber}\n`))
+      
+      setTimeout(async () => {
+        try {
+          let codeBot = await conn.requestPairingCode(formattedNumber)
+          codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
+          
+          console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
+          console.log(chalk.bold.red(`║       CÓDIGO DE VINCULACIÓN       ║`))
+          console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
+          console.log(chalk.bold.white(chalk.bgRed(`\n    🔑  ${codeBot}  🔑    \n`)))
+          
+          console.log(chalk.cyan(`📋 Pasos para vincular:\n`))
+          console.log(chalk.white(`   1️⃣  Abre WhatsApp en tu teléfono`))
+          console.log(chalk.white(`   2️⃣  Ve a Configuración > Dispositivos vinculados`))
+          console.log(chalk.white(`   3️⃣  Toca "Vincular un dispositivo"`))
+          console.log(chalk.white(`   4️⃣  Selecciona "Vincular con número de teléfono"`))
+          console.log(chalk.white(`   5️⃣  Ingresa el código: ${chalk.bold.green(codeBot)}\n`))
+          
+          console.log(chalk.yellow(`⏰ El código expira en 60 segundos\n`))
+          
+        } catch (error) {
+          console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
+          console.log(chalk.bold.red(`║         ERROR AL VINCULAR         ║`))
+          console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
+          console.error(chalk.red(`\n❌ ${error.message}\n`))
+          
+          if (error.message.includes('timed out') || error.message.includes('timeout')) {
+            console.log(chalk.yellow(`⚠️  Posibles causas:`))
+            console.log(chalk.white(`   • El número no tiene WhatsApp activo`))
+            console.log(chalk.white(`   • Problemas de conectividad`))
+            console.log(chalk.white(`   • El formato del número es incorrecto\n`))
+          }
+          
+          console.log(chalk.cyan(`💡 Soluciones:\n`))
+          console.log(chalk.white(`   1. Verifica que el número sea correcto`))
+          console.log(chalk.white(`   2. Reinicia el bot: ${chalk.green('npm start')}`))
+          console.log(chalk.white(`   3. Usa método QR: ${chalk.green('npm start -- qr')}\n`))
+        }
+      }, 3000)
     }
   }
 }
-
-conn.isInit = false
-conn.well = false
 
 // Guardado de BD
 if (!opts['test']) {
@@ -352,39 +398,54 @@ if (!opts['test']) {
 async function connectionUpdate(update) {
   const { connection, lastDisconnect, isNewLogin, qr } = update
   global.stopped = connection
+  
   if (isNewLogin) conn.isInit = true
+  
   const code = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.output?.payload?.statusCode
+  
   if (code && code !== DisconnectReason.loggedOut && conn?.ws.socket == null) {
     await global.reloadHandler(true).catch(console.error)
     global.timestamp.connect = new Date
   }
+  
   if (global.db.data == null) loadDatabase()
+  
   if (qr != 0 && qr != undefined || methodCodeQR) {
     if (opcion == '1' || methodCodeQR) {
-      console.log(chalk.red.bold(`[ 📱 ] Escanea este código QR de Sasuke`))
+      console.log(chalk.yellow(`\n📱 Escanea el código QR con WhatsApp\n`))
     }
   }
+  
   if (connection === "open") {
     const userName = conn.user.name || conn.user.verifiedName || "Usuario"
+    const userNumber = conn.user.id.split(':')[0]
+    
     console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-    console.log(chalk.bold.red(`║   ✅ SASUKE BOT CONECTADO EXITOSAMENTE   ║`))
+    console.log(chalk.bold.red(`║   ✅ SASUKE BOT CONECTADO   ✅    ║`))
     console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
-    console.log(chalk.cyan(`👤 Usuario: ${userName}`))
-    console.log(chalk.cyan(`📱 Número: ${conn.user.id.split(':')[0]}`))
-    console.log(chalk.red(`🔥 Sharingan: Activado`))
-    console.log(chalk.gray(`⏰ Hora: ${new Date().toLocaleString('es-MX')}\n`))
+    console.log(chalk.cyan(`\n👤 Usuario: ${userName}`))
+    console.log(chalk.cyan(`📱 Número: +${userNumber}`))
+    console.log(chalk.red(`🔥 Sharingan: ${chalk.bold.green('ACTIVADO')}`))
+    console.log(chalk.gray(`⏰ Conectado: ${new Date().toLocaleString('es-MX')}\n`))
   }
+  
   let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
+  
   if (connection === "close") {
     if ([401, 440, 428, 405].includes(reason)) {
-      console.log(chalk.red(`⚠ (${code}) › Sesión cerrada.`))
+      console.log(chalk.red(`\n⚠️  Sesión cerrada (código: ${code})`))
+      console.log(chalk.yellow(`💡 Elimina la carpeta "${global.sessions}" y vuelve a conectar\n`))
+    } else {
+      console.log(chalk.yellow(`\n⟳ Reconectando Sasuke Bot...\n`))
+      await global.reloadHandler(true).catch(console.error)
     }
-    console.log(chalk.yellow("⟳ Reconectando Sasuke Bot..."))
-    await global.reloadHandler(true).catch(console.error)
   }
 }
 
+conn.ev.on("creds.update", saveCreds)
+
 process.on('uncaughtException', console.error)
+
 let isInit = true
 let handler = await import('./handler.js')
 
@@ -421,12 +482,13 @@ global.reloadHandler = async function(restatConn) {
 }
 
 process.on('unhandledRejection', (reason) => {
-  console.error("⚠ Rechazo no manejado:", reason)
+  console.error(chalk.red("\n⚠️  Rechazo no manejado:"), reason)
 })
 
 // SubBots de Sasuke
 global.rutaJadiBot = join(__dirname, `./jadi`)
 global.SasukeJadibts = true
+
 if (global.SasukeJadibts) {
   if (!existsSync(global.rutaJadiBot)) {
     mkdirSync(global.rutaJadiBot, { recursive: true })
@@ -506,7 +568,7 @@ filesInit().catch(console.error)
 // Recarga de plugins
 global.reload = async (_ev, filename) => {
   if (!pluginFilter(filename)) return
-  
+
   let dir
   for (const folder of pluginFolders) {
     const possiblePath = global.__filename(join(__dirname, folder, filename), true)
@@ -515,9 +577,9 @@ global.reload = async (_ev, filename) => {
       break
     }
   }
-  
+
   if (!dir) return
-  
+
   if (filename in global.plugins) {
     if (existsSync(dir)) {
       console.log(chalk.yellow(`♻ Recargando plugin: ${filename}`))
@@ -526,63 +588,4 @@ global.reload = async (_ev, filename) => {
         global.plugins[filename] = module.default || module
         console.log(chalk.green(`✓ Plugin recargado: ${filename}`))
       } catch (e) {
-        console.error(chalk.red(`❌ Error al recargar ${filename}:`), e)
-        delete global.plugins[filename]
-      }
-    } else {
-      console.log(chalk.red(`🗑 Plugin eliminado: ${filename}`))
-      delete global.plugins[filename]
-    }
-  } else {
-    console.log(chalk.blue(`➕ Nuevo plugin detectado: ${filename}`))
-    try {
-      const module = await import(`${dir}?update=${Date.now()}`)
-      global.plugins[filename] = module.default || module
-      console.log(chalk.green(`✓ Plugin cargado: ${filename}`))
-    } catch (e) {
-      console.error(chalk.red(`❌ Error al cargar ${filename}:`), e)
-    }
-  }
-}
-
-// Watcher de plugins
-for (const folder of pluginFolders) {
-  const pluginPath = join(__dirname, folder)
-  if (existsSync(pluginPath)) {
-    watch(pluginPath, async (eventType, filename) => {
-      if (filename) {
-        await global.reload(null, filename)
-      }
-    })
-  }
-}
-
-// Inicialización final
-async function startBot() {
-  // Verificar que el handler esté cargado correctamente
-  if (!handler || !handler.handler) {
-    console.error(chalk.red('❌ Error: handler no disponible'))
-    return
-  }
-  
-  // Remover listeners antiguos si existen
-  try {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-    conn.ev.off('creds.update', conn.credsUpdate)
-  } catch {}
-  
-  // Asignar los handlers
-  conn.handler = handler.handler.bind(global.conn)
-  conn.connectionUpdate = connectionUpdate.bind(global.conn)
-  conn.credsUpdate = saveCreds.bind(global.conn, true)
-  
-  // Registrar eventos
-  conn.ev.on('messages.upsert', conn.handler)
-  conn.ev.on('connection.update', conn.connectionUpdate)
-  conn.ev.on('creds.update', conn.credsUpdate)
-  
-  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
-}
-
-startBot().catch(console.error)
+        con
