@@ -357,4 +357,4 @@ async function filesInit() {
   }
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS 
+  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUG
