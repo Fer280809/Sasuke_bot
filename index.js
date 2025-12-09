@@ -34,10 +34,9 @@ const sessions = 'Sessions/Principal'
 const jadi = 'jadi'
 const phoneUtil = PhoneNumberUtil.getInstance()
 
-// ARREGLADO: Validación para NÚMEROS DE HASTA 13 DÍGITOS (incluyendo 521)
+// Validación para NÚMEROS DE HASTA 13 DÍGITOS (incluyendo 521)
 function isValidPhoneNumber(phoneNumber) {
-  const cleanNumber = phoneNumber.replace(/\D/g, '') // Quita todo lo que no sea número
-  // Acepta de 10 a 13 dígitos (ej: 4181450063, 524181450063, 5214181450063)
+  const cleanNumber = phoneNumber.replace(/\D/g, '')
   return /^\d{10,13}$/.test(cleanNumber)
 }
 
@@ -87,7 +86,6 @@ const { version } = await fetchLatestBaileysVersion()
 let phoneNumber = global.botNumber
 const methodCodeQR = process.argv.includes("qr")
 const methodCode = !!phoneNumber || process.argv.includes("code")
-const MethodMobile = process.argv.includes("mobile")
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (texto) => new Promise(resolve => rl.question(texto, resolve))
 let opcion
@@ -104,12 +102,11 @@ if (!methodCodeQR && !methodCode && !fs.existsSync(`${sessions}/creds.json`)) {
 // Logger válido
 const logger = pino({ level: 'silent' })
 
-// Opciones de conexión OPTIMIZADAS para evitar errores de pairing
+// ARREGLADO: Opciones de conexión SIN modo móvil (API compatible)
 const connectionOptions = {
   logger: logger,
   printQRInTerminal: opcion === '1' || methodCodeQR,
-  mobile: true, // Modo móvil más estable para pairing
-  browser: ["Sasuke Bot", "Android", "1.0.0"], // Navegador compatible
+  browser: ["Sasuke Bot", "Chrome", "100.0.0"], // API compatible
   auth: {
     creds: state.creds,
     keys: makeCacheableSignalKeyStore(state.keys, logger)
@@ -122,14 +119,14 @@ const connectionOptions = {
   userDevicesCache,
   cachedGroupMetadata: (jid) => globalThis.conn.chats[jid] ?? {},
   version,
-  keepAliveIntervalMs: 30000, // Intervalo de conexión más corto
-  connectTimeoutMs: 15000 // Tiempo de espera más amplio
+  keepAliveIntervalMs: 30000,
+  connectTimeoutMs: 15000
 }
 
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// Proceso de código de paring (ARREGLADO Y CON SOPORTE A 13 DÍGITOS)
+// Proceso de código de paring (COMPATIBLE Y CON 13 DÍGITOS)
 if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
   if (!conn.authState.creds.registered) {
     do {
@@ -140,7 +137,7 @@ if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) 
     } while (!isValidPhoneNumber(phoneNumber))
     rl.close()
 
-    // Espera a que la conexión esté 100% lista
+    // Espera a que la conexión esté lista
     const waitForConnection = () => new Promise(resolve => {
       const interval = setInterval(() => {
         if (conn.ws.readyState === ws.OPEN) {
@@ -155,25 +152,25 @@ if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) 
 
     try {
       const cleanNumber = phoneNumber.replace(/\D/g, '')
-      // Asegura que el número tenga el prefijo 521 (si no lo tiene, se lo agrega)
+      // Asegura formato 521XXXXXXXXX (13 dígitos)
       const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : 
                                cleanNumber.startsWith('52') ? `521${cleanNumber.slice(2)}` : 
                                `521${cleanNumber}`
       
-      // ARREGLADO: Solicita el código de pairing de forma estable
+      // Proceso de código compatible sin API móvil
       const codeBot = await conn.requestPairingCode(normalizedNumber)
       console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] CÓDIGO VÁLIDO DE SASUKE: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
-      console.log(chalk.green(`✅ Código generado exitosamente - ingrésalo rápido en tu WhatsApp!`))
+      console.log(chalk.green(`✅ Código generado exitosamente - ingrésalo en 2 minutos como máximo!`))
       console.log(chalk.cyan(`💡 Pasos: WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo`))
     } catch (e) {
       console.error(chalk.red(`⚠ Error al generar código: ${e.message}`))
-      // Mensaje de error específico
       if (e.message.includes('invalid number')) {
         console.log(chalk.red(`❌ Número no registrado en WhatsApp o formato incorrecto`))
       } else if (e.message.includes('connection')) {
         console.log(chalk.red(`❌ Problema de conexión - revisa tu internet en Termux`))
       }
-      console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) - es la más confiable`))
+      // Aviso importante sobre el código QR
+      console.log(chalk.yellow(`⚠ IMPORTANTE: Si el código de 8 dígitos no funciona, usa la opción 1 (código QR) - es la única 100% compatible ahora`))
     }
   }
 }
@@ -186,7 +183,7 @@ async function connectionUpdate(update) {
   const { connection, lastDisconnect, isNewLogin, qr } = update
   global.stopped = connection
 
-  if (qr) console.log(chalk.red.bold(`[ 📱 ] Escanea el código QR de Sasuke`))
+  if (qr) console.log(chalk.red.bold(`[ 📱 ] Escanea el código QR de Sasuke - es 100% compatible!`))
   if (connection === "open") {
     const userName = conn.user.name || "Usuario"
     console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
