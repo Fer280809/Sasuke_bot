@@ -32,10 +32,6 @@ const { CONNECTING } = ws
 const { chain } = lodash
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
 
-// Importar dns y forzar IPv4
-import dns from 'dns';
-dns.setDefaultResultOrder('ipv4first');
-
 // MENSAJE DE INICIO
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
@@ -191,37 +187,36 @@ let opcion
 // Función de validación y corrección de teléfono
 async function isValidPhoneNumber(number) {
   try {
-    console.log(chalk.gray(`[isValidPhoneNumber] Validando número: ${number}`))
     let cleanNumber = number.replace(/\D/g, '')
 
     // Caso 1: Número mexicano con 52 + 10 dígitos (falta el 1)
     if (cleanNumber.match(/^52[0-9]{10}$/)) {
-      console.log(chalk.yellow('⚠ [isValidPhoneNumber] Formato: 52 + 10 dígitos detectado'))
+      console.log(chalk.yellow('⚠ Formato: 52 + 10 dígitos detectado'))
       cleanNumber = '521' + cleanNumber.substring(2)
-      console.log(chalk.green(`✓ [isValidPhoneNumber] Número corregido a: +${cleanNumber}`))
+      console.log(chalk.green(`✓ Número corregido a: +${cleanNumber}`))
       return cleanNumber
     }
 
     // Caso 2: Número mexicano con 521 + 10 dígitos (correcto)
     if (cleanNumber.match(/^521[0-9]{10}$/)) {
-      console.log(chalk.green(`✓ [isValidPhoneNumber] Formato correcto detectado: +${cleanNumber}`))
+      console.log(chalk.green(`✓ Formato correcto detectado: +${cleanNumber}`))
       return cleanNumber
     }
 
     // Caso 3: Otros países - validar con la librería
     const parsedNumber = phoneUtil.parse('+' + cleanNumber, null)
     if (phoneUtil.isValidNumber(parsedNumber)) {
-      console.log(chalk.green(`✓ [isValidPhoneNumber] Número válido: +${cleanNumber}`))
+      console.log(chalk.green(`✓ Número válido: +${cleanNumber}`))
       return cleanNumber
     }
 
-    console.log(chalk.red(`❌ [isValidPhoneNumber] Número no reconocido. Formato esperado:`))
+    console.log(chalk.red(`❌ Número no reconocido. Formato esperado:`))
     console.log(chalk.cyan(`   México: 5214181450063 (52 + 1 + 10 dígitos)`))
     console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos, se agregará el 1)`))
     return false
 
   } catch (e) {
-    console.log(chalk.red(`❌ [isValidPhoneNumber] Error: ${e.message}`))
+    console.log(chalk.red(`❌ Error: ${e.message}`))
     return false
   }
 }
@@ -281,69 +276,53 @@ if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
   if (opcion === '2' || methodCode) {
     opcion = '2'
     if (!conn.authState.creds.registered) {
-      let addNumber;
+      let addNumber
       
       if (!!phoneNumber) {
-        addNumber = phoneNumber.replace(/[^0-9]/g, '');
+        addNumber = phoneNumber.replace(/[^0-9]/g, '')
         if (addNumber.startsWith('52') && addNumber.length === 12) {
-          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'));
-          addNumber = '521' + addNumber.substring(2);
-          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`));
+          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'))
+          addNumber = '521' + addNumber.substring(2)
+          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`))
         }
       } else {
-        let validNumber = false;
+        let validNumber = false
         do {
-          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)));
+          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)))
 
-          phoneNumber = phoneNumber.replace(/\D/g, '').trim();
-          console.log(chalk.gray(`Procesando: ${phoneNumber}`));
+          phoneNumber = phoneNumber.replace(/\D/g, '').trim()
+          console.log(chalk.gray(`Procesando: ${phoneNumber}`))
 
-          const result = await isValidPhoneNumber(phoneNumber);
+          const result = await isValidPhoneNumber(phoneNumber)
           if (result) {
-            addNumber = result;
-            validNumber = true;
-            console.log(chalk.bold.green(`✅ Número aceptado: ${addNumber}`));
+            addNumber = result
+            validNumber = true
+            console.log(chalk.bold.green(`✅ Número aceptado: ${addNumber}`))
           } else {
-            console.log(chalk.red('❌ Intenta nuevamente\n'));
+            console.log(chalk.red('❌ Intenta nuevamente\n'))
           }
-        } while (!validNumber);
+        } while (!validNumber)
 
-        rl.close();
+        rl.close()
       }
 
-      // Formatear el número con phoneUtil
-      try {
-        const parsedNumber = phoneUtil.parse(`+${addNumber}`, null);
-        addNumber = phoneUtil.format(parsedNumber, pkg.PhoneNumberFormat.E164);
-        console.log(chalk.green(`✓ Número formateado: ${addNumber}`));
-      } catch (error) {
-        console.error(chalk.red('❌ Error al formatear el número:'), error.message);
-        console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'));
-        return; // Salir si no se puede formatear el número
-      }
-
-      console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`));
+      console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`))
 
       setTimeout(async () => {
         try {
-          // Escuchar el evento 'auth-code-request' (si existe)
-          conn.ev.on('auth-code-request', async () => {
-            console.log(chalk.cyan('✓ Solicitud de código de autenticación recibida'));
-          });
-
-          let codeBot = await conn.requestPairingCode(addNumber);
-          codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot;
-          console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)));
-          console.log(chalk.cyan(`💡 Pasos para vincular:`));
-          console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`));
-          console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`));
-          console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`));
-          console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`));
+          let codeBot = await conn.requestPairingCode(addNumber)
+          codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
+          console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)))
+          console.log(chalk.cyan(`💡 Pasos para vincular:`))
+          console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`))
+          console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`))
+          console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`))
+          console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`))
         } catch (error) {
-          console.error(chalk.red('❌ Error al solicitar código:'), error.message);
-          console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'));
+          console.error(chalk.red('❌ Error al solicitar código:'), error.message)
+          console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'))
         }
-      }, 3000);
+      }, 3000)
     }
   }
 }
@@ -359,7 +338,6 @@ if (!opts['test']) {
 
 // Manejo de conexión
 async function connectionUpdate(update) {
-  console.log(chalk.gray(`[connectionUpdate] Update: ${JSON.stringify(update)}`))
   const { connection, lastDisconnect, isNewLogin, qr } = update
   global.stopped = connection
   if (isNewLogin) conn.isInit = true
@@ -383,50 +361,6 @@ async function connectionUpdate(update) {
     console.log(chalk.cyan(`📱 Número: ${conn.user.id.split(':')[0]}`))
     console.log(chalk.red(`🔥 Sharingan: Activado`))
     console.log(chalk.gray(`⏰ Hora: ${new Date().toLocaleString('es-MX')}\n`))
-
-     // Mover la lógica para procesar mensajes aquí
-    conn.ev.on('messages.upsert', async (m) => {
-      const msg = m.messages[0];
-      if (!msg.key.fromMe && m.key.remoteJid !== 'status@broadcast') {
-        const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.listResponseMessage?.singleSelectReply?.selectedRowText || msg.message?.buttonsResponseMessage?.selectedButtonId || '';
-        const chatId = msg.key.remoteJid;
-
-        console.log('Recibido:', texto, 'de', chatId);
-
-        // Procesar comandos
-        if (texto.startsWith(global.prefix)) {
-          const command = texto.slice(global.prefix.length).trim().split(' ')[0].toLowerCase();
-          const args = texto.slice(global.prefix.length).trim().split(' ').slice(1);
-
-          switch (command) {
-            case 'ping':
-              await conn.sendMessage(chatId, { text: 'Pong!' });
-              break;
-            case 'ayuda':
-              const helpMessage = `
-                Comandos disponibles:
-                ${global.prefix}ping - Responde con "Pong!".
-                ${global.prefix}info - Muestra información del bot.
-                ${global.prefix}ayuda - Muestra este mensaje de ayuda.
-              `;
-              await conn.sendMessage(chatId, { text: helpMessage });
-              break;
-            case 'info':
-              const infoMessage = `
-                Bot de WhatsApp creado con Baileys.
-                Desarrollado por [Tu Nombre/Organización].
-              `;
-              await conn.sendMessage(chatId, { text: infoMessage });
-              break;
-            default:
-              await conn.sendMessage(chatId, { text: `Comando desconocido. Usa ${global.prefix}ayuda para ver la lista de comandos.` });
-          }
-        } else {
-          // Responder a mensajes que no son comandos
-          //await conn.sendMessage(chatId, { text: `Recibiste: ${texto}` });
-        }
-      }
-    });
   }
   let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
   if (connection === "close") {
@@ -636,4 +570,3 @@ async function startBot() {
 }
 
 startBot().catch(console.error)
-
