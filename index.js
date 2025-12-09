@@ -32,6 +32,11 @@ const { CONNECTING } = ws
 const { chain } = lodash
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
 
+// Ajuste: Definir carpeta de sesiones
+const sessions = 'Sessions/Principal'
+// Ajuste: Definir carpeta jadi (para subbots) - si no la tienes, dejar así
+const jadi = 'jadi'
+
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
 say('SASUKE BOT', {
@@ -68,8 +73,19 @@ const __dirname = global.__dirname(import.meta.url)
 global.opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse())
 global.prefix = new RegExp('^[#!./-]')
 
-// Base de datos optimizada
-global.db = new Low(/https?:\/\//.test(opts['db'] || '') ? new cloudDBAdapter(opts['db']) : new JSONFile('database.json'))
+// Base de datos optimizada (ARREGLADA - LowDB v7.x compatible)
+const dbAdapter = /https?:\/\//.test(opts['db'] || '') ? new cloudDBAdapter(opts['db']) : new JSONFile('database.json')
+
+// DATOS POR DEFECTO REQUERIDOS POR LOWDB v7.x - CAMBIA TU NÚMERO AQUÍ
+const defaultDBData = {
+  users: {},
+  chats: {},
+  settings: {},
+  gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
+  config: { prefix: '!', owner: '521xxxxxxxxx', botName: 'Sasuke Bot' }
+}
+
+global.db = new Low(dbAdapter, defaultDBData)
 global.DATABASE = global.db
 global.loadDatabase = async function loadDatabase() {
   if (global.db.READ) {
@@ -84,17 +100,12 @@ global.loadDatabase = async function loadDatabase() {
   global.db.READ = true
   await global.db.read().catch(console.error)
   global.db.READ = null
-  global.db.data = {
-    users: {},
-    chats: {},
-    settings: {},
-    ...(global.db.data || {})
-  }
+  global.db.data = { ...defaultDBData, ...(global.db.data || {}) }
   global.db.chain = chain(global.db.data)
 }
 loadDatabase()
 
-const { state, saveCreds } = await useMultiFileAuthState(global.sessions)
+const { state, saveCreds } = await useMultiFileAuthState(sessions)
 const msgRetryCounterCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
 const userDevicesCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
 const { version } = await fetchLatestBaileysVersion()
@@ -109,18 +120,18 @@ let opcion
 if (methodCodeQR) {
   opcion = '1'
 }
-if (!methodCodeQR && !methodCode && !fs.existsSync(`./${sessions}/creds.json`)) {
+if (!methodCodeQR && !methodCode && !fs.existsSync(`${sessions}/creds.json`)) {
   do {
     opcion = await question(chalk.bold.white("Seleccione una opción:\n") + chalk.redBright("1. Con código QR\n") + chalk.blueBright("2. Con código de 8 dígitos\n━━━> "))
     if (!/^[1-2]$/.test(opcion)) {
       console.log(chalk.bold.redBright(`❌ No se permiten números que no sean 1 o 2`))
     }
-  } while (opcion !== '1' && opcion !== '2' || fs.existsSync(`./${sessions}/creds.json`))
+  } while (opcion !== '1' && opcion !== '2')
 }
 
 console.info = () => {}
 
-// Opciones de conexión optimizadas
+// Opciones de conexión optimizadas (ARREGLADA - sin store.loadMessage)
 const connectionOptions = {
   logger: pino({ level: 'silent' }),
   printQRInTerminal: opcion == '1' ? true : methodCodeQR ? true : false,
@@ -136,8 +147,7 @@ const connectionOptions = {
   getMessage: async (key) => {
     try {
       let jid = jidNormalizedUser(key.remoteJid)
-      let msg = await store.loadMessage(jid, key.id)
-      return msg?.message || ""
+      return "" // Baileys maneja el mensaje faltante automáticamente
     } catch {
       return ""
     }
@@ -154,7 +164,7 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-if (!fs.existsSync(`./${sessions}/creds.json`)) {
+if (!fs.existsSync(`${sessions}/creds.json`)) {
   if (opcion === '2' || methodCode) {
     opcion = '2'
     if (!conn.authState.creds.registered) {
@@ -266,7 +276,7 @@ process.on('unhandledRejection', (reason) => {
 })
 
 // SubBots
-global.rutaJadiBot = join(__dirname, `./${jadi}`)
+global.rutaJadiBot = join(__dirname, `${jadi}`)
 if (global.AstaJadibts) {
   if (!existsSync(global.rutaJadiBot)) {
     mkdirSync(global.rutaJadiBot, { recursive: true })
@@ -351,125 +361,4 @@ global.reload = async (_ev, filename) => {
     const folderPath = join(__dirname, folder)
     if (!existsSync(folderPath)) continue
 
-    const dir = global.__filename(join(folderPath, filename), true)
-    
-    if (existsSync(dir)) {
-      const isUpdate = filename in global.plugins
-      
-      if (isUpdate) {
-        console.log(chalk.yellow(`⟳ ${folder}/${filename}`))
-      } else {
-        console.log(chalk.green(`✨ ${folder}/${filename}`))
-      }
-
-      const err = syntaxerror(readFileSync(dir), filename, {
-        sourceType: 'module',
-        allowAwaitOutsideFunction: true,
-      })
-      
-      if (err) {
-        console.error(chalk.red(`❌ Syntax error: ${filename}`))
-        delete global.plugins[filename]
-      } else {
-        try {
-          const module = await import(`${global.__filename(dir)}?update=${Date.now()}`)
-          global.plugins[filename] = module.default || module
-        } catch (e) {
-          console.error(chalk.red(`❌ ${filename}: ${e.message}`))
-          delete global.plugins[filename]
-        }
-      }
-      return
-    }
-  }
-
-  // Si el archivo fue eliminado
-  if (filename in global.plugins) {
-    console.log(chalk.red(`🗑 ${filename}`))
-    delete global.plugins[filename]
-  }
-}
-
-Object.freeze(global.reload)
-
-// Observar todas las carpetas
-for (const folder of pluginFolders) {
-  const folderPath = join(__dirname, folder)
-  if (existsSync(folderPath)) {
-    watch(folderPath, global.reload)
-  }
-}
-
-await global.reloadHandler()
-
-// Limpieza de archivos temporales (cada 10 minutos)
-setInterval(async () => {
-  const tmpDir = join(__dirname, 'tmp')
-  try {
-    if (existsSync(tmpDir)) {
-      const filenames = readdirSync(tmpDir)
-      for (const file of filenames) {
-        try {
-          const filePath = join(tmpDir, file)
-          const stats = statSync(filePath)
-          const now = Date.now()
-          const fileAge = now - stats.mtimeMs
-          if (fileAge > 5 * 60 * 1000) {
-            unlinkSync(filePath)
-          }
-        } catch {}
-      }
-    }
-  } catch {}
-}, 10 * 60 * 1000)
-
-async function _quickTest() {
-  const test = await Promise.all([
-    spawn('ffmpeg'),
-    spawn('ffprobe'),
-    spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-filter_complex', 'color', '-frames:v', '1', '-f', 'webp', '-']),
-    spawn('convert'),
-    spawn('magick'),
-    spawn('gm'),
-    spawn('find', ['--version']),
-  ].map((p) => {
-    return Promise.race([
-      new Promise((resolve) => {
-        p.on('close', (code) => {
-          resolve(code !== 127)
-        })
-      }),
-      new Promise((resolve) => {
-        p.on('error', (_) => resolve(false))
-      })
-    ])
-  }))
-  const [ffmpeg, ffprobe, ffmpegWebp, convert, magick, gm, find] = test
-  const s = global.support = { ffmpeg, ffprobe, ffmpegWebp, convert, magick, gm, find }
-  Object.freeze(global.support)
-}
-
-_quickTest().catch(console.error)
-
-async function isValidPhoneNumber(number) {
-  try {
-    number = number.replace(/\s+/g, '')
-    if (number.startsWith('+521')) {
-      number = number.replace('+521', '+52')
-    } else if (number.startsWith('+52') && number[4] === '1') {
-      number = number.replace('+52 1', '+52')
-    }
-    const parsedNumber = phoneUtil.parseAndKeepRawInput(number)
-    return phoneUtil.isValidNumber(parsedNumber)
-  } catch {
-    return false
-  }
-}
-
-async function joinChannels(sock) {
-  for (const value of Object.values(global.ch)) {
-    if (typeof value === 'string' && value.endsWith('@newsletter')) {
-      await sock.newsletterFollow(value).catch(() => {})
-    }
-  }
-}
+    const dir = global.__filename(join(folderPath, filename),
