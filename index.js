@@ -14,11 +14,11 @@ import path, { join, dirname } from 'path'
 import { Boom } from '@hapi/boom'
 import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
-import { JSONFile } from 'lowdb/node'
+import { JSONFile from 'lowdb/node'
 import pkg from 'google-libphonenumber'
 const { PhoneNumberUtil } = pkg
 const phoneUtil = PhoneNumberUtil.getInstance()
-const { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = await import('@whiskeysockets/baileys')
+import baileys from '@whiskeysockets/baileys' // Importar el módulo completo
 import readline from 'readline'
 
 // Importar dns y forzar IPv4
@@ -92,7 +92,7 @@ const connectionOptions = {
   printQRInTerminal: process.argv.includes("qr"),
   mobile: process.argv.includes("mobile"),
   browser: ["Chrome (Linux)", "", ""],
-  auth: { creds: state.creds, keys: (await import('@whiskeysockets/baileys')).makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })) },
+  auth: { creds: state.creds, keys: baileys.makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })) }, // Usar baileys.
   markOnlineOnConnect: false,
   generateHighQualityLinkPreview: true,
   syncFullHistory: false,
@@ -171,7 +171,7 @@ async function connectionUpdate(update) {
   global.stopped = connection
   if (isNewLogin) conn.isInit = true
   const code = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.output?.payload?.statusCode
-  if (code && code !== (0, import('@whiskeysockets/baileys')).DisconnectReason.loggedOut && conn?.ws.socket == null) { await global.reloadHandler(true).catch(console.error); global.timestamp.connect = new Date }
+  if (code && code !== baileys.DisconnectReason.loggedOut && conn?.ws.socket == null) { await global.reloadHandler(true).catch(console.error); global.timestamp.connect = new Date } // Usar baileys.
   if (global.db.data == null) loadDatabase()
   if (qr != 0 && qr != undefined || process.argv.includes("qr")) { if (process.argv.includes("qr")) console.log(chalk.red.bold(`[ 📱 ] Escanea este código QR de Sasuke`)) }
   if (connection === "open") {
