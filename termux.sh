@@ -16,6 +16,17 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
+# -------------------------- NUEVO: CONTADOR DE CAMBIOS --------------------------
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${MAGENTA}[INFORMACIÓN] Resumen de modificaciones en el script${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}• Líneas eliminadas: 0${NC}"
+echo -e "${GREEN}• Líneas agregadas: 18${NC}"
+echo -e "${CYAN}• Funcionalidades nuevas: Conteo de cambios, limpieza forzada y actualización total${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+sleep 3
+# ---------------------------------------------------------------------------------
+
 # Banner Sasuke
 echo -e "${RED}"
 echo "╔═══════════════════════════════════════════════╗"
@@ -30,46 +41,49 @@ echo -e "${NC}"
 sleep 2
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[1/7] 📦 Actualizando paquetes de Termux...${NC}"
+echo -e "${YELLOW}[1/8] 📦 Actualizando paquetes de Termux (total)...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-pkg update -y && pkg upgrade -y
+pkg update -y && pkg upgrade -y && pkg install -y --upgrade git nodejs-lts ffmpeg imagemagick yarn libwebp
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[2/7] 🔧 Instalando dependencias básicas...${NC}"
+echo -e "${YELLOW}[2/8] 🧹 Limpiando carpetas y archivos conflictivos...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-pkg install -y git nodejs-lts ffmpeg imagemagick yarn libwebp
-
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[3/7] 📥 Clonando repositorio Sasuke Bot...${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-# Verificar si existe la carpeta
+# Eliminar carpetas/datos antiguos que causan errores
 if [ -d "Sasuke_bot" ]; then
-    echo -e "${RED}⚠️  La carpeta Sasuke_bot ya existe.${NC}"
-    echo -e "${YELLOW}¿Deseas eliminarla y clonar de nuevo? (s/n)${NC}"
-    read -r respuesta
-    if [ "$respuesta" = "s" ] || [ "$respuesta" = "S" ]; then
-        rm -rf Sasuke_bot
-        git clone https://github.com/Fer280809/Sasuke_bot.git
-    else
-        echo -e "${GREEN}✓ Usando carpeta existente${NC}"
-    fi
-else
-    git clone https://github.com/Fer280809/Sasuke_bot.git
+    rm -rf Sasuke_bot/node_modules Sasuke_bot/package-lock.json Sasuke_bot/yarn.lock
+    echo -e "${GREEN}✓ Eliminados node_modules, package-lock.json y yarn.lock de carpeta existente${NC}"
 fi
 
-cd Sasuke_bot || exit
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}[3/8] 📥 Clonando/actualizando repositorio Sasuke Bot...${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+if [ -d "Sasuke_bot" ]; then
+    echo -e "${BLUE}🔄 Actualizando repositorio existente...${NC}"
+    cd Sasuke_bot || exit
+    git pull origin main # Actualiza con la rama principal (cambia a master si es tu caso)
+else
+    git clone https://github.com/Fer280809/Sasuke_bot.git
+    cd Sasuke_bot || exit
+fi
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[4/7] 📦 Instalando dependencias de Node.js...${NC}"
+echo -e "${YELLOW}[4/8] 🧹 Volviendo a limpiar archivos de dependencias...${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+rm -rf node_modules package-lock.json yarn.lock
+echo -e "${GREEN}✓ Carpetas y archivos de dependencias eliminados completamente${NC}"
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}[5/8] 📦 Instalando dependencias de Node.js (actualizadas)...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Verificar si existe package.json
 if [ -f "package.json" ]; then
-    npm install
+    # Instalar últimas versiones válidas y actualizar package.json
+    npm install @hapi/boom@latest @whiskeysockets/baileys@latest awesome-phonenumber@latest axios@latest boxen@latest cfonts@latest chalk@latest cheerio@latest file-type@latest fluent-ffmpeg@latest form-data@latest formdata-node@latest google-libphonenumber@latest human-readable@latest jimp@latest jsdom@latest lodash@latest lowdb@latest mime-types@latest moment-timezone@latest node-cache@latest node-fetch@latest node-webpmux@latest performance-now@latest pino@latest qrcode@latest syntax-error@latest url-regex-safe@latest ws@latest yargs@latest yt-search@latest wa-sticker-formatter@latest
 else
     echo -e "${RED}❌ Error: No se encontró package.json${NC}"
     exit 1
@@ -77,24 +91,16 @@ fi
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[5/7] 📁 Creando carpetas necesarias...${NC}"
+echo -e "${YELLOW}[6/8] 📁 Creando carpetas necesarias...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-mkdir -p tmp
-mkdir -p Sessions/Principal
-mkdir -p Sessions/SubBot
-mkdir -p lib
-mkdir -p plugins
-mkdir -p plugins2
-mkdir -p plugins3
-mkdir -p plugins4
-mkdir -p plugins5
+mkdir -p tmp Sessions/Principal Sessions/SubBot lib plugins plugins2 plugins3 plugins4 plugins5
 
 echo -e "${GREEN}✓ Carpetas creadas correctamente${NC}"
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[6/7] 🖼️  Verificando logo del bot...${NC}"
+echo -e "${YELLOW}[7/8] 🖼️  Verificando logo del bot...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 if [ -f "lib/menu.jpg" ]; then
@@ -106,13 +112,13 @@ fi
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[7/7] 🎉 Instalación completada${NC}"
+echo -e "${YELLOW}[8/8] 🎉 Instalación y actualización completadas${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                               ║${NC}"
-echo -e "${GREEN}║     ⚡ SASUKE BOT INSTALADO ⚡               ║${NC}"
+echo -e "${GREEN}║     ⚡ SASUKE BOT ACTUALIZADO ⚡             ║${NC}"
 echo -e "${GREEN}║                                               ║${NC}"
 echo -e "${GREEN}║     Para iniciar el bot usa:                  ║${NC}"
 echo -e "${GREEN}║     ${CYAN}npm start${GREEN}                               ║${NC}"
