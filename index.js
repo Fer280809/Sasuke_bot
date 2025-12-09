@@ -10,7 +10,7 @@ import fs, { readdirSync, statSync, unlinkSync, existsSync, mkdirSync, readFileS
 import yargs from 'yargs'
 import { spawn } from 'child_process'
 import lodash from 'lodash'
-import { SasukeJadiBot } from './plugins/sockets-serbot.js' // Cambiado a Sasuke
+import { SasukeJadiBot } from './plugins/sockets-serbot.js'
 import chalk from 'chalk'
 import syntaxerror from 'syntax-error'
 import pino from 'pino'
@@ -31,7 +31,7 @@ const { CONNECTING } = ws
 const { chain } = lodash
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
 
-// MENSAJE GRANDE DE COLORES DE SASUKE (sin cambios)
+// MENSAJE DE INICIO
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
 say('SASUKE BOT', {
@@ -90,15 +90,15 @@ global.loadDatabase = async function loadDatabase() {
     users: {},
     chats: {},
     settings: {},
-    gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } }, // Añadido tu gacha
-    config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // Tu configuración
+    gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
+    config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' }
   }
   global.db.chain = chain(global.db.data)
 }
 loadDatabase()
 
-// Configuración de sesión y versión
-global.sessions = 'Sessions/Principal' // Definido sesión principal
+// Configuración de sesión
+global.sessions = 'Sessions/Principal'
 const { state, saveCreds } = await useMultiFileAuthState(global.sessions)
 const msgRetryCounterCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
 const userDevicesCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
@@ -111,7 +111,17 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (texto) => new Promise((resolver) => rl.question(texto, resolver))
 let opcion
 
-// Selección de método de inicio
+// Función de validación de teléfono
+async function isValidPhoneNumber(number) {
+  try {
+    const parsedNumber = phoneUtil.parse(number, null)
+    return phoneUtil.isValidNumber(parsedNumber)
+  } catch {
+    return false
+  }
+}
+
+// Selección de método
 if (methodCodeQR) {
   opcion = '1'
 }
@@ -126,7 +136,7 @@ if (!methodCodeQR && !methodCode && !fs.existsSync(`./${global.sessions}/creds.j
 
 console.info = () => {}
 
-// Opciones de conexión OPTIMIZADAS (la que sí funciona)
+// Opciones de conexión
 const connectionOptions = {
   logger: pino({ level: 'silent' }),
   printQRInTerminal: opcion == '1' ? true : methodCodeQR ? true : false,
@@ -160,7 +170,7 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// Proceso de código de 8 dígitos (EL QUE SÍ FUNCIONA)
+// Proceso de código de 8 dígitos
 if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
   if (opcion === '2' || methodCode) {
     opcion = '2'
@@ -277,7 +287,7 @@ process.on('unhandledRejection', (reason) => {
 
 // SubBots de Sasuke
 global.rutaJadiBot = join(__dirname, `./jadi`)
-global.SasukeJadibts = true // Activado subbots
+global.SasukeJadibts = true
 if (global.SasukeJadibts) {
   if (!existsSync(global.rutaJadiBot)) {
     mkdirSync(global.rutaJadiBot, { recursive: true })
@@ -296,7 +306,7 @@ if (global.SasukeJadibts) {
   }
 }
 
-// Carga de plugins (tu sistema de 5 carpetas)
+// Carga de plugins
 const pluginFolders = ['./plugins', './plugins2', './plugins3', './plugins4', './plugins5']
 const pluginFilter = filename => /\.js$/.test(filename)
 global.plugins = {}
@@ -354,6 +364,67 @@ async function filesInit() {
 
 filesInit().catch(console.error)
 
-// Recarga optimizada de plugins
+// Recarga de plugins (FUNCIÓN COMPLETA Y CORREGIDA)
 global.reload = async (_ev, filename) => {
-  if (!
+  if (!pluginFilter(filename)) return
+  
+  let dir
+  for (const folder of pluginFolders) {
+    const possiblePath = global.__filename(join(__dirname, folder, filename), true)
+    if (existsSync(possiblePath)) {
+      dir = possiblePath
+      break
+    }
+  }
+  
+  if (!dir) return
+  
+  if (filename in global.plugins) {
+    if (existsSync(dir)) {
+      console.log(chalk.yellow(`♻ Recargando plugin: ${filename}`))
+      try {
+        const module = await import(`${dir}?update=${Date.now()}`)
+        global.plugins[filename] = module.default || module
+        console.log(chalk.green(`✓ Plugin recargado: ${filename}`))
+      } catch (e) {
+        console.error(chalk.red(`❌ Error al recargar ${filename}:`), e)
+        delete global.plugins[filename]
+      }
+    } else {
+      console.log(chalk.red(`🗑 Plugin eliminado: ${filename}`))
+      delete global.plugins[filename]
+    }
+  } else {
+    console.log(chalk.blue(`➕ Nuevo plugin detectado: ${filename}`))
+    try {
+      const module = await import(`${dir}?update=${Date.now()}`)
+      global.plugins[filename] = module.default || module
+      console.log(chalk.green(`✓ Plugin cargado: ${filename}`))
+    } catch (e) {
+      console.error(chalk.red(`❌ Error al cargar ${filename}:`), e)
+    }
+  }
+}
+
+// Watcher de plugins
+for (const folder of pluginFolders) {
+  const pluginPath = join(__dirname, folder)
+  if (existsSync(pluginPath)) {
+    watch(pluginPath, async (eventType, filename) => {
+      if (filename) {
+        await global.reload(null, filename)
+      }
+    })
+  }
+}
+
+// Inicialización final
+async function startBot() {
+  conn.ev.on('messages.upsert', conn.handler)
+  conn.ev.on('connection.update', conn.connectionUpdate)
+  conn.ev.on('creds.update', conn.credsUpdate)
+  
+  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
+}
+
+startBot().catch(console.error)
