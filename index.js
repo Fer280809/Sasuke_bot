@@ -189,12 +189,21 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (texto) => new Promise((resolver) => rl.question(texto, resolver))
 let opcion
 
-// Función de validación de teléfono
+// Función de validación y corrección de teléfono
 async function isValidPhoneNumber(number) {
   try {
+    // Verificar si es número mexicano sin el "1" después del 52
+    if (number.match(/^\+?52[0-9]{10}$/)) {
+      console.log(chalk.yellow('⚠ Número mexicano detectado, agregando "1" después del código de país...'))
+      // Agregar el "1" después del 52: +52 1 4181450063
+      number = number.replace(/^\+?52([0-9]{10})$/, '+521$1')
+      console.log(chalk.green(`✓ Número corregido: ${number}`))
+    }
+    
     const parsedNumber = phoneUtil.parse(number, null)
-    return phoneUtil.isValidNumber(parsedNumber)
-  } catch {
+    return phoneUtil.isValidNumber(parsedNumber) ? number : false
+  } catch (e) {
+    console.log(chalk.red(`❌ Error validando número: ${e.message}`))
     return false
   }
 }
@@ -256,21 +265,45 @@ if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
       let addNumber
       if (!!phoneNumber) {
         addNumber = phoneNumber.replace(/[^0-9]/g, '')
+        // Verificar si es mexicano y agregar el 1
+        if (addNumber.startsWith('52') && addNumber.length === 12) {
+          console.log(chalk.yellow('⚠ Número mexicano: agregando "1"...'))
+          addNumber = '521' + addNumber.substring(2)
+          console.log(chalk.green(`✓ Número ajustado: ${addNumber}`))
+        }
       } else {
+        let validNumber = false
         do {
           phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp (ej: 5214181450063):\n${chalk.bold.magentaBright('━━━> ')}`)))
           phoneNumber = phoneNumber.replace(/\D/g, '')
+          
+          // Agregar + si no lo tiene
           if (!phoneNumber.startsWith('+')) {
             phoneNumber = `+${phoneNumber}`
           }
-        } while (!await isValidPhoneNumber(phoneNumber))
+          
+          // Validar y corregir si es necesario
+          const result = await isValidPhoneNumber(phoneNumber)
+          if (result) {
+            phoneNumber = result
+            validNumber = true
+          } else {
+            console.log(chalk.red('❌ Número inválido, intenta de nuevo'))
+          }
+        } while (!validNumber)
+        
         rl.close()
         addNumber = phoneNumber.replace(/\D/g, '')
+        
         setTimeout(async () => {
-          let codeBot = await conn.requestPairingCode(addNumber)
-          codeBot = codeBot.match(/.{1,4}/g)?.join("-") || codeBot
-          console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] CÓDIGO DE SASUKE:`)), chalk.bold.white(codeBot))
-          console.log(chalk.cyan(`💡 Ingresalo en WhatsApp > Ajustes > Dispositivos vinculados`))
+          try {
+            let codeBot = await conn.requestPairingCode(addNumber)
+            codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
+            console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] CÓDIGO DE SASUKE:`)), chalk.bold.white(codeBot))
+            console.log(chalk.cyan(`💡 Ingresalo en WhatsApp > Ajustes > Dispositivos vinculados`))
+          } catch (error) {
+            console.error(chalk.red('❌ Error al solicitar código:'), error.message)
+          }
         }, 3000)
       }
     }
@@ -498,6 +531,25 @@ for (const folder of pluginFolders) {
 
 // Inicialización final
 async function startBot() {
+  // Verificar que el handler esté cargado correctamente
+  if (!handler || !handler.handler) {
+    console.error(chalk.red('❌ Error: handler no disponible'))
+    return
+  }
+  
+  // Remover listeners antiguos si existen
+  try {
+    conn.ev.off('messages.upsert', conn.handler)
+    conn.ev.off('connection.update', conn.connectionUpdate)
+    conn.ev.off('creds.update', conn.credsUpdate)
+  } catch {}
+  
+  // Asignar los handlers
+  conn.handler = handler.handler.bind(global.conn)
+  conn.connectionUpdate = connectionUpdate.bind(global.conn)
+  conn.credsUpdate = saveCreds.bind(global.conn, true)
+  
+  // Registrar eventos
   conn.ev.on('messages.upsert', conn.handler)
   conn.ev.on('connection.update', conn.connectionUpdate)
   conn.ev.on('creds.update', conn.credsUpdate)
