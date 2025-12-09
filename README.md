@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Sasuke Bot](https://files.catbox.moe/lajq7h.jpg)
+![Sasuke Bot](https://files.catbox.moe/7uup5c.jpg)
 
 ### ⚡ Bot de WhatsApp Multi-Dispositivo con Sharingan ⚡
 
