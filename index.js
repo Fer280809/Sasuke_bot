@@ -575,4 +575,50 @@ global.reload = async (_ev, filename) => {
     console.log(chalk.blue(`➕ Nuevo plugin detectado: ${filename}`))
     try {
       const module = await import(`${dir}?update=${Date.now()}`)
+      global.plugins[filename] = module.default || module
+      console.log(chalk.green(`✓ Plugin cargado: ${filename}`))
+    } catch (e) {
+      console.error(chalk.red(`❌ Error al cargar ${filename}:`), e)
+    }
+  }
+}
+
+// Watcher de plugins
+for (const folder of pluginFolders) {
+  const pluginPath = join(__dirname, folder)
+  if (existsSync(pluginPath)) {
+    watch(pluginPath, async (eventType, filename) => {
+      if (filename) {
+        await global.reload(null, filename)
+      }
+    })
+  }
+}
+
+// Inicialización final
+async function startBot() {
+  if (!handler || !handler.handler) {
+    console.error(chalk.red('❌ Error: handler no disponible'))
+    return
+  }
+
+  try {
+    conn.ev.off('messages.upsert', conn.handler)
+    conn.ev.off('connection.update', conn.connectionUpdate)
+    conn.ev.off('creds.update', conn.credsUpdate)
+  } catch {}
+
+  conn.handler = handler.handler.bind(global.conn)
+  conn.connectionUpdate = connectionUpdate.bind(global.conn)
+  conn.credsUpdate = saveCreds.bind(global.conn, true)
+
+  conn.ev.on('messages.upsert', conn.handler)
+  conn.ev.on('connection.update', conn.connectionUpdate)
+  conn.ev.on('creds.update', conn.credsUpdate)
+
+  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
+}
+
+startBot().catch(console.error)
+
       
