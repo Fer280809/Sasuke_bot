@@ -69,7 +69,7 @@ const dbAdapter = /https?:\/\//.test(opts.db || '') ? new cloudDBAdapter(opts.db
 const defaultDBData = {
   users: {}, chats: {}, settings: {},
   gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
-  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // Tu número aquí
+  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // Tu número aquí (con 521)
 }
 
 global.db = new Low(dbAdapter, defaultDBData)
@@ -127,7 +127,7 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// Proceso de código de paring - AÑADE "521"
+// Proceso de código de paring - AGREGA EL 1 DESPUÉS DEL 52 (CORRECTO)
 if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
   if (!conn.authState.creds.registered) {
     // Pregunta sin ejemplo
@@ -155,8 +155,11 @@ if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) 
 
     try {
       const cleanNumber = phoneNumber.replace(/\D/g, '')
-      // **AÑADE "521"**: Agregamos "521" al número
-      const codeBot = await conn.requestPairingCode(`521${cleanNumber.slice(2)}`)
+      // AGREGA EL 1 DESPUÉS DEL 52:
+      // Si ingresas 524181450063 → se convierte en 5214181450063
+      // Si ingresas 5214181450063 → se queda igual (no se duplica el 1)
+      const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : `521${cleanNumber.slice(2)}`
+      const codeBot = await conn.requestPairingCode(normalizedNumber)
       console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] Código Sasuke: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
     } catch (e) {
       console.error(chalk.red(`⚠ Error al pedir el código: ${e.message}`))
@@ -248,7 +251,7 @@ if (global.SasukeJadibts) {
   })
 }
 
-// Carga de plugins (simplificada pero con estilo)
+// Carga de plugins (simplificada pero con estilo - SIN ERROR DE SINTAXIS)
 const pluginFolders = ['./plugins', './plugins2', './plugins3', './plugins4', './plugins5']
 const pluginFilter = (f) => f.endsWith('.js')
 global.plugins = {}
@@ -256,7 +259,7 @@ global.plugins = {}
 async function filesInit() {
   console.log(chalk.bold.red('\n╔═══════════════════════════════════╗'))
   console.log(chalk.bold.red('║      CARGANDO PLUGINS...          ║'))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n'))
+  console.log(chalk.bold.red('╚═══════════════════════════════════╝\n'))
 
   let total = 0
   for (const folder of pluginFolders) {
