@@ -353,6 +353,4 @@ async function filesInit() {
 
 filesInit().catch(console.error)
 
-// Recarga optimizada de plugins - COMPLETADO para no tener error
-global.reload = async (_ev, filename) => {
-  if (!pluginFilter
+// Recarga optimizada de plugins - COMPLETA Y
