@@ -192,18 +192,39 @@ let opcion
 // Función de validación y corrección de teléfono
 async function isValidPhoneNumber(number) {
   try {
-    // Verificar si es número mexicano sin el "1" después del 52
-    if (number.match(/^\+?52[0-9]{10}$/)) {
-      console.log(chalk.yellow('⚠ Número mexicano detectado, agregando "1" después del código de país...'))
-      // Agregar el "1" después del 52: +52 1 4181450063
-      number = number.replace(/^\+?52([0-9]{10})$/, '+521$1')
-      console.log(chalk.green(`✓ Número corregido: ${number}`))
+    // Limpiar el número
+    let cleanNumber = number.replace(/\D/g, '')
+    
+    // Caso 1: Número mexicano con 52 + 10 dígitos (falta el 1)
+    // Ejemplo: 524181450063 -> 5214181450063
+    if (cleanNumber.match(/^52[0-9]{10}$/)) {
+      console.log(chalk.yellow('⚠ Formato: 52 + 10 dígitos detectado'))
+      cleanNumber = '521' + cleanNumber.substring(2)
+      console.log(chalk.green(`✓ Número corregido a: +${cleanNumber}`))
+      return '+' + cleanNumber
     }
     
-    const parsedNumber = phoneUtil.parse(number, null)
-    return phoneUtil.isValidNumber(parsedNumber) ? number : false
+    // Caso 2: Número mexicano con 521 + 10 dígitos (correcto)
+    // Ejemplo: 5214181450063
+    if (cleanNumber.match(/^521[0-9]{10}$/)) {
+      console.log(chalk.green(`✓ Formato correcto detectado: +${cleanNumber}`))
+      return '+' + cleanNumber
+    }
+    
+    // Caso 3: Otros países - validar con la librería
+    const parsedNumber = phoneUtil.parse('+' + cleanNumber, null)
+    if (phoneUtil.isValidNumber(parsedNumber)) {
+      console.log(chalk.green(`✓ Número válido: +${cleanNumber}`))
+      return '+' + cleanNumber
+    }
+    
+    console.log(chalk.red(`❌ Número no reconocido. Formato esperado:`))
+    console.log(chalk.cyan(`   México: 5214181450063 (52 + 1 + 10 dígitos)`))
+    console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos, se agregará el 1)`))
+    return false
+    
   } catch (e) {
-    console.log(chalk.red(`❌ Error validando número: ${e.message}`))
+    console.log(chalk.red(`❌ Error: ${e.message}`))
     return false
   }
 }
@@ -274,35 +295,42 @@ if (!fs.existsSync(`./${global.sessions}/creds.json`)) {
       } else {
         let validNumber = false
         do {
-          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp (ej: 5214181450063):\n${chalk.bold.magentaBright('━━━> ')}`)))
-          phoneNumber = phoneNumber.replace(/\D/g, '')
+          phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese el número de WhatsApp:\n${chalk.cyan('Ejemplo México: 5214181450063 o 524181450063')}\n${chalk.bold.magentaBright('━━━> ')}`)))
           
-          // Agregar + si no lo tiene
-          if (!phoneNumber.startsWith('+')) {
-            phoneNumber = `+${phoneNumber}`
-          }
+          // Limpiar entrada
+          phoneNumber = phoneNumber.replace(/\D/g, '').trim()
           
-          // Validar y corregir si es necesario
+          console.log(chalk.gray(`Procesando: ${phoneNumber}`))
+          
+          // Validar y corregir
           const result = await isValidPhoneNumber(phoneNumber)
           if (result) {
             phoneNumber = result
             validNumber = true
+            console.log(chalk.bold.green(`✅ Número aceptado: ${phoneNumber}`))
           } else {
-            console.log(chalk.red('❌ Número inválido, intenta de nuevo'))
+            console.log(chalk.red('❌ Intenta nuevamente\n'))
           }
         } while (!validNumber)
         
         rl.close()
         addNumber = phoneNumber.replace(/\D/g, '')
         
+        console.log(chalk.cyan(`\n⏳ Solicitando código de pareamiento para: ${addNumber}...\n`))
+        
         setTimeout(async () => {
           try {
             let codeBot = await conn.requestPairingCode(addNumber)
             codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
-            console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] CÓDIGO DE SASUKE:`)), chalk.bold.white(codeBot))
-            console.log(chalk.cyan(`💡 Ingresalo en WhatsApp > Ajustes > Dispositivos vinculados`))
+            console.log(chalk.bold.white(chalk.bgRed(`\n[ 🔑 ] CÓDIGO DE SASUKE: ${codeBot}\n`)))
+            console.log(chalk.cyan(`💡 Pasos para vincular:`))
+            console.log(chalk.cyan(`   1. Abre WhatsApp en tu teléfono`))
+            console.log(chalk.cyan(`   2. Ve a Ajustes > Dispositivos vinculados`))
+            console.log(chalk.cyan(`   3. Toca "Vincular un dispositivo"`))
+            console.log(chalk.cyan(`   4. Ingresa este código: ${codeBot}\n`))
           } catch (error) {
             console.error(chalk.red('❌ Error al solicitar código:'), error.message)
+            console.log(chalk.yellow('⚠ Intenta reiniciar el bot con: npm start'))
           }
         }, 3000)
       }
