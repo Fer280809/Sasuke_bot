@@ -6,7 +6,7 @@ import { createRequire } from 'module'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { platform } from 'process'
 import * as ws from 'ws'
-import fs, { readdirSync, statSync, unlinkSync, existsSync, mkdirSync, readFileSync, rmSync, watch } from 'fs'
+import fs, { readdirSync, statSync, unlinkSync, existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from 'fs'
 import yargs from 'yargs'
 import { spawn } from 'child_process'
 import lodash from 'lodash'
@@ -18,7 +18,8 @@ import Pino from 'pino'
 import path, { join } from 'path'
 import { Boom } from '@hapi/boom'
 import { makeWASocket, protoType, serialize } from './lib/simple.js'
-import { Low, JSONFile } from 'lowdb'
+import { Low } from 'lowdb'
+import { JSONFile } from 'lowdb/node'
 import store from './lib/store.js'
 const { proto } = (await import('@whiskeysockets/baileys')).default
 import pkg from 'google-libphonenumber'
@@ -70,9 +71,36 @@ const __dirname = global.__dirname(import.meta.url)
 global.opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse())
 global.prefix = new RegExp('^[#!./-]')
 
-// Base de datos
-global.db = new Low(/https?:\/\//.test(opts['db'] || '') ? new cloudDBAdapter(opts['db']) : new JSONFile('database.json'))
+// Clase JSONFile alternativa para lowdb v3 o anterior
+class JSONFileSync {
+  constructor(filename) {
+    this.filename = filename
+  }
+  read() {
+    try {
+      const data = readFileSync(this.filename, 'utf-8')
+      return JSON.parse(data)
+    } catch {
+      return null
+    }
+  }
+  write(obj) {
+    writeFileSync(this.filename, JSON.stringify(obj, null, 2))
+  }
+}
+
+// Base de datos con compatibilidad
+const dbPath = 'database.json'
+let adapter
+try {
+  adapter = new JSONFile(dbPath)
+} catch {
+  adapter = new JSONFileSync(dbPath)
+}
+
+global.db = new Low(adapter)
 global.DATABASE = global.db
+
 global.loadDatabase = async function loadDatabase() {
   if (global.db.READ) {
     return new Promise((resolve) => setInterval(async function() {
@@ -86,12 +114,19 @@ global.loadDatabase = async function loadDatabase() {
   global.db.READ = true
   await global.db.read().catch(console.error)
   global.db.READ = null
-  global.db.data = {
+  global.db.data = global.db.data || {
     users: {},
     chats: {},
     settings: {},
-    gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
-    config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' }
+    gacha: { 
+      personajes: [], 
+      probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } 
+    },
+    config: { 
+      prefix: '!', 
+      owner: '5214181450063', 
+      botName: 'Sasuke Bot' 
+    }
   }
   global.db.chain = chain(global.db.data)
 }
@@ -161,7 +196,7 @@ const connectionOptions = {
   msgRetryCounterCache,
   userDevicesCache,
   defaultQueryTimeoutMs: undefined,
-  cachedGroupMetadata: (jid) => globalThis.conn.chats[jid] ?? {},
+  cachedGroupMetadata: (jid) => globalThis.conn?.chats?.[jid] ?? {},
   version,
   keepAliveIntervalMs: 50000,
   maxIdleTimeMs: 60000,
@@ -332,7 +367,7 @@ async function filesInit() {
     for (const filename of files) {
       const file = global.__filename(join(folderPath, filename))
       allLoadPromises.push(
-        import(file)
+        import(`${file}?v=${Date.now()}`)
           .then(module => {
             global.plugins[filename] = module.default || module
             folderStats[folder]++
@@ -364,7 +399,7 @@ async function filesInit() {
 
 filesInit().catch(console.error)
 
-// Recarga de plugins (FUNCIÓN COMPLETA Y CORREGIDA)
+// Recarga de plugins
 global.reload = async (_ev, filename) => {
   if (!pluginFilter(filename)) return
   
