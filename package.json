@@ -1,0 +1,74 @@
+{
+  "name": "sasuke_bot",
+  "version": "2.0.0",
+  "description": "Sasuke Bot - WhatsApp Bot Multi Device con Sharingan y Sistema Gacha",
+  "main": "index.js",
+  "type": "module",
+  "directories": {
+    "lib": "lib",
+    "plugins": "plugins"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fer280809/Sasuke_bot.git"
+  },  
+  "keywords": [
+    "whatsapp-bot",
+    "baileys",
+    "sasuke",
+    "multi-device",
+    "bot",
+    "gacha",
+    "anime"
+  ],
+  "author": "Fernando",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Fer280809/Sasuke_bot/issues"
+  },
+  "homepage": "https://github.com/Fer280809/Sasuke_bot#readme",
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "awesome-phonenumber": "^6.14.0",
+    "axios": "^1.7.9",
+    "boxen": "^8.0.1",
+    "cfonts": "^3.3.0",
+    "chalk": "^5.3.0",
+    "cheerio": "^1.0.0",
+    "file-type": "^19.7.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "form-data": "^4.0.1",
+    "formdata-node": "^6.0.3",
+    "google-libphonenumber": "^3.2.40",
+    "human-readable": "^0.2.1",
+    "jimp": "^1.6.0",
+    "jsdom": "^25.0.1",
+    "lodash": "^4.17.21",
+    "lowdb": "^7.0.1",
+    "mime-types": "^2.1.35",
+    "moment-timezone": "^0.5.47",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^3.3.2",
+    "node-webpmux": "^3.1.10",
+    "performance-now": "^2.1.0",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "syntax-error": "^1.4.0",
+    "url-regex-safe": "^4.0.0",
+    "ws": "^8.18.0",
+    "yargs": "^17.7.2",
+    "yt-search": "^2.12.1"
+  },
+  "optionalDependencies": {
+    "wa-sticker-formatter": "^4.4.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
