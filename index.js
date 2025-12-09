@@ -20,7 +20,7 @@ import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
 import { JSONFile } from 'lowdb/node'
 import { proto } from '@whiskeysockets/baileys'
-// Importación de google-libphonenumber (CommonJS)
+// Importación de google-libphonenumber (solo para si lo necesitas después)
 import pkgPhone from 'google-libphonenumber'
 const { PhoneNumberUtil } = pkgPhone
 import { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } from '@whiskeysockets/baileys'
@@ -34,23 +34,13 @@ const PORT = process.env.PORT || 3000
 const sessions = 'Sessions/Principal'
 const jadi = 'jadi'
 const phoneUtil = PhoneNumberUtil.getInstance()
-const DEFAULT_REGION = 'MX' // Región por defecto: México
 
-// ARREGLADO: Función de validación flexible para números mexicanos
-async function isValidPhoneNumber(phoneNumber) {
-  try {
-    // Eliminamos todo lo que no sea número
-    const cleanNumber = phoneNumber.replace(/\D/g, '')
-    // Para México: aceptamos con o sin el 1 intermedio (ej: 52418... o 521418...)
-    const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : 
-                            cleanNumber.startsWith('52') ? `521${cleanNumber.slice(2)}` : 
-                            cleanNumber
-    
-    const number = phoneUtil.parseAndKeepRawInput(normalizedNumber, DEFAULT_REGION)
-    return phoneUtil.isValidNumber(number)
-  } catch {
-    return false
-  }
+// ARREGLADO: Validación SUPER SIMPLE y efectiva para números mexicanos (SIN EJEMPLO)
+// Acepta: 5214181450063 o 524181450063 (solo 11 o 12 dígitos, empieza con 52)
+function isValidPhoneNumber(phoneNumber) {
+  const cleanNumber = phoneNumber.replace(/\D/g, '') // Quita todo lo que no sea número
+  // Expresión regular: empieza con 52, tiene 11 o 12 dígitos en total
+  return /^52\d{9,10}$/.test(cleanNumber)
 }
 
 // Mensaje de inicio con estilo
@@ -79,7 +69,7 @@ const dbAdapter = /https?:\/\//.test(opts.db || '') ? new cloudDBAdapter(opts.db
 const defaultDBData = {
   users: {}, chats: {}, settings: {},
   gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
-  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // PON TU NÚMERO AQUÍ (CON 1)
+  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // Tu número aquí
 }
 
 global.db = new Low(dbAdapter, defaultDBData)
@@ -137,16 +127,20 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// ARREGLADO: Proceso de código de paring - ahora espera a que la conexión esté lista
+// Proceso de código de paring - listo y sin ejemplo
 if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
   if (!conn.authState.creds.registered) {
-    // Pedimos el número primero
+    // Pregunta sin ejemplo
     do {
-      phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número (ej: 524181450063 o 5214181450063): `)))
-    } while (!await isValidPhoneNumber(phoneNumber))
+      phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número: `)))
+      // Mensaje de error claro si no es válido
+      if (!isValidPhoneNumber(phoneNumber)) {
+        console.log(chalk.bold.red(`❌ Número no válido - debe empezar con 52 y tener 11 o 12 dígitos`))
+      }
+    } while (!isValidPhoneNumber(phoneNumber))
     rl.close()
 
-    // Esperamos a que la conexión esté lista antes de pedir el código
+    // Espera a que la conexión esté lista
     const waitForConnection = () => new Promise(resolve => {
       const interval = setInterval(() => {
         if (conn.ws.readyState === ws.OPEN) {
@@ -161,7 +155,8 @@ if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) 
 
     try {
       const cleanNumber = phoneNumber.replace(/\D/g, '')
-      const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : `521${cleanNumber.slice(2)}`
+      // Normaliza a 12 dígitos (con 1 intermedio) si es necesario
+      const normalizedNumber = cleanNumber.length === 11 ? `521${cleanNumber.slice(2)}` : cleanNumber
       const codeBot = await conn.requestPairingCode(normalizedNumber)
       console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] Código Sasuke: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
     } catch (e) {
@@ -257,7 +252,7 @@ global.plugins = {}
 async function filesInit() {
   console.log(chalk.bold.red('\n╔═══════════════════════════════════╗'))
   console.log(chalk.bold.red('║      CARGANDO PLUGINS...          ║'))
-  console.log(chalk.bold.red('╚═══════════════════════════════════╝\n'))
+  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
 
   let total = 0
   for (const folder of pluginFolders) {
@@ -270,7 +265,6 @@ async function filesInit() {
     const files = fs.readdirSync(folderPath).filter(pluginFilter)
     for (const file of files) {
       try {
-        // ARREGLADO: Importación de plugins (soluciona el "0 cargados")
         const module = await import(path.resolve(folderPath, file))
         global.plugins[file] = module.default || module
         total++
