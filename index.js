@@ -1,291 +1,95 @@
 process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '1'
 
-// Importaciones básicas
-import './settings.js'
-import './plugins/_allfake.js'
-import cfonts from 'cfonts'
-import { createRequire } from 'module'
-import { fileURLToPath } from 'url'
-import { platform } from 'process'
-import * as ws from 'ws'
-import fs from 'fs'
-import yargs from 'yargs'
-import lodash from 'lodash'
-import { SasukeJadiBot } from './plugins/sockets-serbot.js'
-import chalk from 'chalk'
-import pino from 'pino'
-import path from 'path'
-import { Boom } from '@hapi/boom'
-import { makeWASocket, protoType, serialize } from './lib/simple.js'
-import { Low } from 'lowdb'
-import { JSONFile } from 'lowdb/node'
-import { proto } from '@whiskeysockets/baileys'
-// Importación de google-libphonenumber (solo para si lo necesitas después)
-import pkgPhone from 'google-libphonenumber'
-const { PhoneNumberUtil } = pkgPhone
-import { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } from '@whiskeysockets/baileys'
+// Importaciones básicas necesarias
+import { useMultiFileAuthState, fetchLatestBaileysVersion, makeWASocket } from '@whiskeysockets/baileys'
 import readline from 'readline'
-import NodeCache from 'node-cache'
+import chalk from 'chalk'
+import fs from 'fs'
 
-// Variables globales básicas
-const { CONNECTING } = ws
-const { chain } = lodash
-const PORT = process.env.PORT || 3000
+// Configuración básica
 const sessions = 'Sessions/Principal'
-const jadi = 'jadi'
-const phoneUtil = PhoneNumberUtil.getInstance()
-
-// Validación SUPER SIMPLE y efectiva para números mexicanos
-// Acepta: 5214181450063 o 524181450063 (solo 11 o 12 dígitos, empieza con 52)
-function isValidPhoneNumber(phoneNumber) {
-  const cleanNumber = phoneNumber.replace(/\D/g, '') // Quita todo lo que no sea número
-  // Expresión regular: empieza con 52, tiene 11 o 12 dígitos en total
-  return /^52\d{9,10}$/.test(cleanNumber)
-}
-
-// Mensaje de inicio con estilo
-let { say } = cfonts
-console.log(chalk.red('\n⚡ Iniciando Sistema...'))
-say('SASUKE BOT', { font: 'block', align: 'center', gradient: ['red', 'blue'] })
-say('Sistema Multi-Plugins Activado', { font: 'console', align: 'center', colors: ['cyan'] })
-say('Sharingan Ready', { font: 'tiny', align: 'center', colors: ['red', 'white'] })
-
-// Configuración de rutas globales (simplificada)
-protoType()
-serialize()
-
-global.__filename = (pathURL = import.meta.url) => fileURLToPath(pathURL)
-global.__dirname = () => path.dirname(global.__filename(import.meta.url))
-global.__require = (dir = import.meta.url) => createRequire(dir)
-
-// Timestamp y opciones
-global.timestamp = { start: new Date }
-const __dirname = global.__dirname()
-global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
-global.prefix = new RegExp('^[#!./-]')
-
-// Base de datos (simplificada pero compatible)
-const dbAdapter = /https?:\/\//.test(opts.db || '') ? new cloudDBAdapter(opts.db) : new JSONFile('database.json')
-const defaultDBData = {
-  users: {}, chats: {}, settings: {},
-  gacha: { personajes: [], probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } },
-  config: { prefix: '!', owner: '5214181450063', botName: 'Sasuke Bot' } // Tu número aquí (con 521)
-}
-
-global.db = new Low(dbAdapter, defaultDBData)
-global.loadDatabase = async () => {
-  if (global.db.data) return
-  await global.db.read().catch(console.error)
-  global.db.data = { ...defaultDBData, ...global.db.data }
-  global.db.chain = chain(global.db.data)
-}
-loadDatabase()
-
-// Configuración de autenticación y conexión
-const { state, saveCreds } = await useMultiFileAuthState(sessions)
-const msgRetryCounterCache = new NodeCache({ stdTTL: 0 })
-const userDevicesCache = new NodeCache({ stdTTL: 0 })
-const { version } = await fetchLatestBaileysVersion()
-let phoneNumber = global.botNumber
-const methodCodeQR = process.argv.includes("qr")
-const methodCode = !!phoneNumber || process.argv.includes("code")
-const MethodMobile = process.argv.includes("mobile")
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (texto) => new Promise(resolve => rl.question(texto, resolve))
-let opcion
 
-// Selección de método de inicio (simplificada)
-if (methodCodeQR) opcion = '1'
-if (!methodCodeQR && !methodCode && !fs.existsSync(`${sessions}/creds.json`)) {
+// Función para preguntar número (solo acepta 52 + 9 o 10 dígitos)
+async function askPhoneNumber() {
+  let phoneNumber
+  do {
+    phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número (ej: 524181450063): `)))
+    const cleanNumber = phoneNumber.replace(/\D/g, '')
+    if (!/^52\d{9,10}$/.test(cleanNumber)) {
+      console.log(chalk.bold.red(`❌ Número no válido - debe empezar con 52 y tener 11 o 12 dígitos`))
+    } else {
+      return cleanNumber
+    }
+  } while (true)
+}
+
+// Función principal
+async function startBot() {
+  console.log(chalk.red('\n⚡ Iniciando Sasuke Bot...'))
+
+  // Crear carpeta de sesión si no existe
+  if (!fs.existsSync(sessions)) fs.mkdirSync(sessions, { recursive: true })
+
+  // Estado de autenticación y versión de Baileys
+  const { state, saveCreds } = await useMultiFileAuthState(sessions)
+  const { version } = await fetchLatestBaileysVersion()
+
+  // Seleccionar método de inicio
+  let opcion
   do {
     opcion = await question(chalk.bold.white("Seleccione una opción:\n1. Con código QR\n2. Con código de 8 dígitos\n━━━> "))
     if (!/^[1-2]$/.test(opcion)) console.log(chalk.bold.red(`❌ Solo números 1 o 2`))
   } while (opcion !== '1' && opcion !== '2')
-}
 
-// Opciones de conexión optimizadas
-const connectionOptions = {
-  logger: pino({ level: 'silent' }),
-  printQRInTerminal: opcion === '1' || methodCodeQR,
-  mobile: MethodMobile,
-  browser: ["Sasuke Bot", "Chrome", "1.0.0"],
-  auth: {
-    creds: state.creds,
-    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
-  },
-  markOnlineOnConnect: false,
-  generateHighQualityLinkPreview: true,
-  syncFullHistory: false,
-  getMessage: async () => "",
-  msgRetryCounterCache,
-  userDevicesCache,
-  cachedGroupMetadata: (jid) => globalThis.conn.chats[jid] ?? {},
-  version,
-  keepAliveIntervalMs: 50000
-}
+  // Crear conexión
+  const conn = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: opcion === '1',
+    browser: ["Sasuke Bot", "Chrome", "1.0.0"],
+    logger: { level: 'silent' }
+  })
 
-global.conn = makeWASocket(connectionOptions)
-conn.ev.on("creds.update", saveCreds)
+  // Guardar credenciales
+  conn.ev.on('creds.update', saveCreds)
 
-// Proceso de código de paring - AGREGA EL 1 DESPUÉS DEL 52 (CORRECTO)
-if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
-  if (!conn.authState.creds.registered) {
-    // Pregunta sin ejemplo
-    do {
-      phoneNumber = await question(chalk.bgBlack(chalk.bold.red(`[ 🔐 ] Ingrese su número: `)))
-      // Mensaje de error claro si no es válido
-      if (!isValidPhoneNumber(phoneNumber)) {
-        console.log(chalk.bold.red(`❌ Número no válido - debe empezar con 52 y tener 11 o 12 dígitos`))
-      }
-    } while (!isValidPhoneNumber(phoneNumber))
+  // Proceso con código de 8 dígitos (CONFIGURACIÓN CORRECTA PARA MÉXICO)
+  if (opcion === '2' && !conn.authState.creds.registered) {
+    const cleanNumber = await askPhoneNumber()
     rl.close()
 
-    // Espera a que la conexión esté lista
-    const waitForConnection = () => new Promise(resolve => {
-      const interval = setInterval(() => {
-        if (conn.ws.readyState === ws.OPEN) {
-          clearInterval(interval)
-          resolve()
-        }
-      }, 500)
-    })
-
+    // Esperar a que la conexión esté lista
     console.log(chalk.yellow(`[ ⏳ ] Esperando conexión con WhatsApp...`))
-    await waitForConnection()
+    while (conn.ws.readyState !== 1) await new Promise(resolve => setTimeout(resolve, 500))
 
     try {
-      const cleanNumber = phoneNumber.replace(/\D/g, '')
-      // AGREGA EL 1 DESPUÉS DEL 52:
-      // Si ingresas 524181450063 → se convierte en 5214181450063
-      // Si ingresas 5214181450063 → se queda igual (no se duplica el 1)
+      // AGREGAR 1 DESPUÉS DE 52 (FORMATO CORRECTO PARA MÉXICO)
       const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : `521${cleanNumber.slice(2)}`
-      const codeBot = await conn.requestPairingCode(normalizedNumber)
-      console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] Código Sasuke: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
+      const pairingCode = await conn.requestPairingCode(normalizedNumber)
+      console.log(chalk.bold.green(`\n[ 🔑 ] CÓDIGO DE PAIRED VÁLIDO:`))
+      console.log(chalk.bold.white(chalk.bgRed(`  ${pairingCode.match(/.{1,4}/g)?.join("-") || pairingCode}  `)))
+      console.log(chalk.cyan(`💡 Ingresa este código en tu WhatsApp (Dispositivos vinculados > Vincular dispositivo)`))
     } catch (e) {
-      console.error(chalk.red(`⚠ Error al pedir el código: ${e.message}`))
-      // Mensaje más específico si falla el pairing
-      if (e.message.includes('Connection Closed')) {
-        console.log(chalk.red(`❌ Falló la conexión con WhatsApp - revisa tu internet`))
-      } else {
-        console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) si el problema persiste`))
-      }
+      console.error(chalk.red(`\n⚠ Error al generar código: ${e.message}`))
+      console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) - es más confiable`))
     }
   }
-}
 
-// Guardado automático de BD
-if (!opts.test) setInterval(async () => global.db.data && await global.db.write().catch(() => {}), 60000)
-
-// Manejo de conexión (simplificada)
-async function connectionUpdate(update) {
-  const { connection, lastDisconnect, isNewLogin, qr } = update
-  global.stopped = connection
-
-  if (qr) console.log(chalk.red.bold(`[ 📱 ] Escanea el código QR de Sasuke`))
-  if (connection === "open") {
-    const userName = conn.user.name || "Usuario"
-    console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-    console.log(chalk.bold.red(`║   ⚡ SASUKE BOT CONECTADO ⚡     ║`))
-    console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
-    console.log(chalk.cyan(`👤 Usuario: ${userName}`))
-    console.log(chalk.cyan(`📱 Número: ${conn.user.id.split(':')[0]}`))
-    console.log(chalk.red(`🔥 Sharingan: Activado`))
-    console.log(chalk.gray(`⏰ Hora: ${new Date().toLocaleString('es-MX')}\n`))
-  }
-
-  if (connection === "close") {
-    const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-    if ([401, 440].includes(reason)) console.log(chalk.red(`⚠ Sesión cerrada - vuelve a iniciar`))
-    console.log(chalk.yellow("⟳ Reconectando Sasuke Bot..."))
-    await global.reloadHandler(true).catch(console.error)
-  }
-}
-
-// Manejo de errores
-process.on('uncaughtException', console.error)
-process.on('unhandledRejection', (reason) => console.error("⚠ Rechazo no manejado:", reason))
-
-// Carga de handler y recarga
-let isInit = true
-let handler = await import('./handler.js')
-
-global.reloadHandler = async (restatConn) => {
-  try {
-    const newHandler = await import(`./handler.js?update=${Date.now()}`)
-    if (newHandler) handler = newHandler
-  } catch (e) { console.error(e) }
-
-  if (restatConn) {
-    global.conn?.ws.close()
-    conn.ev.removeAllListeners()
-    global.conn = makeWASocket(connectionOptions)
-    isInit = true
-  }
-
-  if (!isInit) {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-  }
-
-  conn.handler = handler.handler.bind(conn)
-  conn.connectionUpdate = connectionUpdate.bind(conn)
-  conn.ev.on('messages.upsert', conn.handler)
-  conn.ev.on('connection.update', conn.connectionUpdate)
-  isInit = false
-  return true
-}
-
-// Subbots (simplificada)
-global.rutaJadiBot = path.join(__dirname, jadi)
-if (global.SasukeJadibts) {
-  if (!fs.existsSync(global.rutaJadiBot)) {
-    fs.mkdirSync(global.rutaJadiBot, { recursive: true })
-    console.log(chalk.bold.cyan(`✓ Carpeta ${jadi} creada`))
-  }
-
-  fs.readdirSync(global.rutaJadiBot).forEach(gjbts => {
-    const botPath = path.join(global.rutaJadiBot, gjbts)
-    if (fs.existsSync(path.join(botPath, 'creds.json'))) {
-      SasukeJadiBot({ pathSasukeJadiBot: botPath, conn, usedPrefix: '/', command: 'serbot' })
+  // Manejo de conexión exitosa
+  conn.ev.on('connection.update', (update) => {
+    const { connection } = update
+    if (connection === 'open') {
+      console.log(chalk.bold.green(`\n✅ Bot conectado exitosamente!`))
+      console.log(chalk.cyan(`👤 Número: ${conn.user.id.split(':')[0]}`))
+    }
+    if (connection === 'close') {
+      console.log(chalk.yellow(`\n⟳ Reconectando bot...`))
+      startBot()
     }
   })
 }
 
-// Carga de plugins (simplificada pero con estilo - SIN ERROR DE SINTAXIS)
-const pluginFolders = ['./plugins', './plugins2', './plugins3', './plugins4', './plugins5']
-const pluginFilter = (f) => f.endsWith('.js')
-global.plugins = {}
-
-async function filesInit() {
-  console.log(chalk.bold.red('\n╔═══════════════════════════════════╗'))
-  console.log(chalk.bold.red('║      CARGANDO PLUGINS...          ║'))
-  console.log(chalk.bold.red('╚═══════════════════════════════════╝\n'))
-
-  let total = 0
-  for (const folder of pluginFolders) {
-    const folderPath = path.join(__dirname, folder)
-    if (!fs.existsSync(folderPath)) {
-      console.log(chalk.gray(`⚠ ${folder} no existe`))
-      continue
-    }
-
-    const files = fs.readdirSync(folderPath).filter(pluginFilter)
-    for (const file of files) {
-      try {
-        const module = await import(path.resolve(folderPath, file))
-        global.plugins[file] = module.default || module
-        total++
-      } catch (e) {
-        console.error(chalk.red(`❌ ${folder}/${file}: ${e.message}`))
-      }
-    }
-    console.log(chalk.green(`✓ ${folder}: ${files.length} plugins (${Object.keys(global.plugins).filter(k => files.includes(k)).length} cargados)`))
-  }
-
-  console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS CARGADOS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝`))
-}
-
-// Llamada a la función de carga de plugins
-filesInit()
+// Iniciar el bot
+startBot()
