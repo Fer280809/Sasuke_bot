@@ -349,4 +349,11 @@ async function filesInit() {
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
   console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS CARGADOS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n
+  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
+}
+
+filesInit().catch(console.error)
+
+// Recarga optimizada de plugins
+global.reload = async (_ev, filename) => {
+  if (!
