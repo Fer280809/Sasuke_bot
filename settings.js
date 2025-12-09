@@ -27,7 +27,7 @@ global.vs = "^2.0"
 global.nameqr = "SASUKE BOT"
 global.sessions = "Sessions/Principal"
 global.jadi = "Sessions/SubBot"
-global.AstaJadibts = true
+global.SasukeJadibts = true
 
 //*─ׄ─ׅ─ׄ─⭒─ׄ─ׅ─ׄ─⭒─ׄ─ׅ─ׄ─⭒─ׄ─ׅ─ׄ─⭒─ׄ─ׅ─ׄ─⭒─ׄ─ׅ─ׄ─*
 
