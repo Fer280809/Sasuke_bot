@@ -187,36 +187,37 @@ let opcion
 // Función de validación y corrección de teléfono
 async function isValidPhoneNumber(number) {
   try {
+    console.log(chalk.gray(`[isValidPhoneNumber] Validando número: ${number}`))
     let cleanNumber = number.replace(/\D/g, '')
 
     // Caso 1: Número mexicano con 52 + 10 dígitos (falta el 1)
     if (cleanNumber.match(/^52[0-9]{10}$/)) {
-      console.log(chalk.yellow('⚠ Formato: 52 + 10 dígitos detectado'))
+      console.log(chalk.yellow('⚠ [isValidPhoneNumber] Formato: 52 + 10 dígitos detectado'))
       cleanNumber = '521' + cleanNumber.substring(2)
-      console.log(chalk.green(`✓ Número corregido a: +${cleanNumber}`))
+      console.log(chalk.green(`✓ [isValidPhoneNumber] Número corregido a: +${cleanNumber}`))
       return cleanNumber
     }
 
     // Caso 2: Número mexicano con 521 + 10 dígitos (correcto)
     if (cleanNumber.match(/^521[0-9]{10}$/)) {
-      console.log(chalk.green(`✓ Formato correcto detectado: +${cleanNumber}`))
+      console.log(chalk.green(`✓ [isValidPhoneNumber] Formato correcto detectado: +${cleanNumber}`))
       return cleanNumber
     }
 
     // Caso 3: Otros países - validar con la librería
     const parsedNumber = phoneUtil.parse('+' + cleanNumber, null)
     if (phoneUtil.isValidNumber(parsedNumber)) {
-      console.log(chalk.green(`✓ Número válido: +${cleanNumber}`))
+      console.log(chalk.green(`✓ [isValidPhoneNumber] Número válido: +${cleanNumber}`))
       return cleanNumber
     }
 
-    console.log(chalk.red(`❌ Número no reconocido. Formato esperado:`))
+    console.log(chalk.red(`❌ [isValidPhoneNumber] Número no reconocido. Formato esperado:`))
     console.log(chalk.cyan(`   México: 5214181450063 (52 + 1 + 10 dígitos)`))
     console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos, se agregará el 1)`))
     return false
 
   } catch (e) {
-    console.log(chalk.red(`❌ Error: ${e.message}`))
+    console.log(chalk.red(`❌ [isValidPhoneNumber] Error: ${e.message}`))
     return false
   }
 }
@@ -338,6 +339,7 @@ if (!opts['test']) {
 
 // Manejo de conexión
 async function connectionUpdate(update) {
+  console.log(chalk.gray(`[connectionUpdate] Update: ${JSON.stringify(update)}`))
   const { connection, lastDisconnect, isNewLogin, qr } = update
   global.stopped = connection
   if (isNewLogin) conn.isInit = true
@@ -361,6 +363,50 @@ async function connectionUpdate(update) {
     console.log(chalk.cyan(`📱 Número: ${conn.user.id.split(':')[0]}`))
     console.log(chalk.red(`🔥 Sharingan: Activado`))
     console.log(chalk.gray(`⏰ Hora: ${new Date().toLocaleString('es-MX')}\n`))
+
+     // Mover la lógica para procesar mensajes aquí
+    conn.ev.on('messages.upsert', async (m) => {
+      const msg = m.messages[0];
+      if (!msg.key.fromMe && m.key.remoteJid !== 'status@broadcast') {
+        const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.listResponseMessage?.singleSelectReply?.selectedRowText || msg.message?.buttonsResponseMessage?.selectedButtonId || '';
+        const chatId = msg.key.remoteJid;
+
+        console.log('Recibido:', texto, 'de', chatId);
+
+        // Procesar comandos
+        if (texto.startsWith(global.prefix)) {
+          const command = texto.slice(global.prefix.length).trim().split(' ')[0].toLowerCase();
+          const args = texto.slice(global.prefix.length).trim().split(' ').slice(1);
+
+          switch (command) {
+            case 'ping':
+              await conn.sendMessage(chatId, { text: 'Pong!' });
+              break;
+            case 'ayuda':
+              const helpMessage = `
+                Comandos disponibles:
+                ${global.prefix}ping - Responde con "Pong!".
+                ${global.prefix}info - Muestra información del bot.
+                ${global.prefix}ayuda - Muestra este mensaje de ayuda.
+              `;
+              await conn.sendMessage(chatId, { text: helpMessage });
+              break;
+            case 'info':
+              const infoMessage = `
+                Bot de WhatsApp creado con Baileys.
+                Desarrollado por [Tu Nombre/Organización].
+              `;
+              await conn.sendMessage(chatId, { text: infoMessage });
+              break;
+            default:
+              await conn.sendMessage(chatId, { text: `Comando desconocido. Usa ${global.prefix}ayuda para ver la lista de comandos.` });
+          }
+        } else {
+          // Responder a mensajes que no son comandos
+          //await conn.sendMessage(chatId, { text: `Recibiste: ${texto}` });
+        }
+      }
+    });
   }
   let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
   if (connection === "close") {
@@ -526,47 +572,4 @@ global.reload = async (_ev, filename) => {
     try {
       const module = await import(`${dir}?update=${Date.now()}`)
       global.plugins[filename] = module.default || module
-      console.log(chalk.green(`✓ Plugin cargado: ${filename}`))
-    } catch (e) {
-      console.error(chalk.red(`❌ Error al cargar ${filename}:`), e)
-    }
-  }
-}
-
-// Watcher de plugins
-for (const folder of pluginFolders) {
-  const pluginPath = join(__dirname, folder)
-  if (existsSync(pluginPath)) {
-    watch(pluginPath, async (eventType, filename) => {
-      if (filename) {
-        await global.reload(null, filename)
-      }
-    })
-  }
-}
-
-// Inicialización final
-async function startBot() {
-  if (!handler || !handler.handler) {
-    console.error(chalk.red('❌ Error: handler no disponible'))
-    return
-  }
-
-  try {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-    conn.ev.off('creds.update', conn.credsUpdate)
-  } catch {}
-
-  conn.handler = handler.handler.bind(global.conn)
-  conn.connectionUpdate = connectionUpdate.bind(global.conn)
-  conn.credsUpdate = saveCreds.bind(global.conn, true)
-
-  conn.ev.on('messages.upsert', conn.handler)
-  conn.ev.on('connection.update', conn.connectionUpdate)
-  conn.ev.on('creds.update', conn.credsUpdate)
-
-  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
-}
-
-startBot().catch(console.error)
+      console.log(chalk.green(`✓ Plugin car
