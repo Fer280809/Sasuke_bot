@@ -26,7 +26,7 @@ say('SASUKE BOT', { font: 'block', align: 'center', gradient: ['red', 'blue'] })
 say('Sistema Multi-Plugins Activado', { font: 'console', align: 'center', colors: ['cyan'] })
 say('Sharingan Ready', { font: 'tiny', align: 'center', colors: ['red', 'white'] })
 
-// Función principal - SOLO PARA CÓDIGO DE 8 DÍGITOS (optimizada)
+// Función principal - CON REINTENTOS DE CONEXIÓN
 async function startBot() {
   // Crear carpeta de sesión
   if (!fs.existsSync(sessions)) fs.mkdirSync(sessions, { recursive: true })
@@ -36,47 +36,76 @@ async function startBot() {
   const { version } = await fetchLatestBaileysVersion()
 
   // Logger válido
-  const logger = pino({ level: 'warn' }) // Mostramos warnings para detectar problemas
+  const logger = pino({ level: 'warn' })
 
-  // Conexión OPTIMIZADA para código de pairing
+  // Conexión OPTIMIZADA PARA TERMUX
   const conn = makeWASocket({
     version,
     auth: state,
-    browser: ["Mozilla", "Firefox", "120.0"], // Navegador 100% compatible
+    browser: ["Mozilla", "Firefox", "120.0"],
     logger: logger,
     syncFullHistory: false,
-    connectTimeoutMs: 20000,
-    keepAliveIntervalMs: 25000
+    connectTimeoutMs: 30000, // Tiempo de espera mayor
+    keepAliveIntervalMs: 25000,
+    proxy: undefined, // Quitar proxy que pueda interferir
+    qrTimeoutMs: 0 // QR sin tiempo de expiración
   })
 
   conn.ev.on('creds.update', saveCreds)
 
-  // Proceso EXCLUSIVO de código de 8 dígitos
+  // Proceso EXCLUSIVO de código de 8 dígitos o QR
   if (!conn.authState.creds.registered) {
     const cleanNumber = await askPhoneNumber()
     rl.close()
 
-    // Esperar a que la conexión esté 100% lista (con tiempo extra)
-    console.log(chalk.yellow(`[ ⏳ ] Esperando conexión segura con WhatsApp... (max 10 seg)`))
+    // SOLUCIÓN: Esperar conexión con REINTENTOS (hasta 3 veces)
+    console.log(chalk.yellow(`[ ⏳ ] Esperando conexión segura con WhatsApp... (hasta 3 reintentos)`))
     let connectionReady = false
-    const connectionTimeout = setTimeout(() => {
-      if (!connectionReady) {
-        console.log(chalk.red(`❌ Tiempo de espera agotado - revisa tu internet`))
-        process.exit(1)
+    let reintentos = 0
+    const maxReintentos = 3
+
+    while (!connectionReady && reintentos < maxReintentos) {
+      try {
+        // Esperar a que la conexión esté lista (30 seg por intento)
+        const timeout = setTimeout(() => {
+          throw new Error('Tiempo de espera agotado en este intento')
+        }, 30000)
+
+        while (conn.ws.readyState !== 1) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+
+        clearTimeout(timeout)
+        connectionReady = true
+        console.log(chalk.green(`✅ Conexión establecida en intento ${reintentos + 1}`))
+      } catch (e) {
+        reintentos++
+        console.log(chalk.orange(`⚠ Intento ${reintentos} fallido - reintentando...`))
+        // Reiniciar la conexión en cada intento
+        conn.ws.close()
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
-    }, 10000)
+    }
 
-    while (conn.ws.readyState !== 1) await new Promise(resolve => setTimeout(resolve, 200))
-    connectionReady = true
-    clearTimeout(connectionTimeout)
+    if (!connectionReady) {
+      console.log(chalk.red(`❌ No se pudo establecer conexión - pero activamos el QR de todos modos!`))
+      conn.ev.on('connection.update', (update) => {
+        if (update.qr) {
+          console.log(chalk.red.bold(`[ 📱 ] Escanea este QR - funciona sin importar el internet de Termux`))
+        }
+        if (update.connection === 'open') {
+          console.log(chalk.bold.green(`\n✅ Bot conectado exitosamente!`))
+        }
+      })
+      return
+    }
 
+    // Generar código de 8 dígitos si la conexión está lista
     try {
-      // Asegurar formato 521XXXXXXXXX (13 dígitos)
       const normalizedNumber = cleanNumber.startsWith('521') ? cleanNumber : 
                                cleanNumber.startsWith('52') ? `521${cleanNumber.slice(2)}` : 
                                `521${cleanNumber}`
       
-      // SOLUCIÓN: Solicitar código con encabezados correctos
       const pairingCode = await conn.requestPairingCode(normalizedNumber, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
@@ -85,16 +114,12 @@ async function startBot() {
 
       console.log(chalk.bold.green(`\n✅ ¡CÓDIGO DE 8 DÍGITOS FUNCIONAL!`))
       console.log(chalk.bold.white(chalk.bgRed(`  ${pairingCode.match(/.{1,4}/g)?.join("-") || pairingCode}  `)))
-      console.log(chalk.cyan(`💡 INGRESALO AHORA MISMO: WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo`))
-      console.log(chalk.yellow(`⚠ Solo tienes 1 minuto para usarlo!`))
+      console.log(chalk.cyan(`💡 INGRESALO AHORA: WhatsApp > Ajustes > Dispositivos vinculados`))
     } catch (e) {
-      console.error(chalk.red(`\n⚠ Error final al generar código: ${e.message}`))
-      
-      // SOLUCIÓN ALTERNATIVA: Mostrar código QR automáticamente si falla el de 8 dígitos
-      console.log(chalk.green(`\n🔄 Activando solución alternativa: CÓDIGO QR`))
+      console.error(chalk.red(`\n⚠ Error al generar código - activando QR`))
       conn.ev.on('connection.update', (update) => {
         if (update.qr) {
-          console.log(chalk.red.bold(`[ 📱 ] Escanea este QR - es la única garantía de funcionar`))
+          console.log(chalk.red.bold(`[ 📱 ] Escanea este QR - es la solución segura`))
         }
         if (update.connection === 'open') {
           console.log(chalk.bold.green(`\n✅ Bot conectado exitosamente!`))
