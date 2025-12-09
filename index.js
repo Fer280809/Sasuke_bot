@@ -10,7 +10,7 @@ import yargs from 'yargs'
 import lodash from 'lodash'
 import chalk from 'chalk'
 import pino from 'pino'
-import path, { join } from 'path'
+import path, { join, dirname } from 'path'
 import { Boom } from '@hapi/boom'
 import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
@@ -27,10 +27,9 @@ dns.setDefaultResultOrder('ipv4first');
 
 // Funciones y variables globales
 const __filename = (pathURL = import.meta.url, rmPrefix = platform !== 'win32') => rmPrefix ? /file:\/\/\//.test(pathURL) ? fileURLToPath(pathURL) : pathURL : pathToFileURL(pathURL).toString()
-const __dirname = pathURL => path.dirname(__filename(pathURL, true))
+const __dirnameFile = dirname(fileURLToPath(import.meta.url));
 const require = dir => createRequire(dir)
 global.timestamp = { start: new Date() }
-const __dirname = __dirname(import.meta.url)
 global.opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse())
 global.prefix = new RegExp('^[#!./-]')
 global.sessions = 'Sessions/Principal'
@@ -40,12 +39,8 @@ class JSONFileSync {
   constructor(filename) {
     this.filename = filename
   }
-  read() {
-    try { return JSON.parse(readFileSync(this.filename, 'utf-8')) } catch { return null }
-  }
-  write(obj) {
-    writeFileSync(this.filename, JSON.stringify(obj, null, 2))
-  }
+  read() { try { return JSON.parse(readFileSync(this.filename, 'utf-8')) } catch { return null } }
+  write(obj) { writeFileSync(this.filename, JSON.stringify(obj, null, 2)) }
 }
 
 // Base de datos con compatibilidad
@@ -102,8 +97,6 @@ const connectionOptions = {
   generateHighQualityLinkPreview: true,
   syncFullHistory: false,
   getMessage: async (key) => (await store.loadMessage((0, import('@whiskeysockets/baileys').jidNormalizedUser)(key.remoteJid), key.id))?.message || "",
-  msgRetryCounterCache: new (await import('node-cache')).default({ stdTTL: 0, checkperiod: 0 }),
-  userDevicesCache: new (await import('node-cache')).default({ stdTTL: 0, checkperiod: 0 }),
   defaultQueryTimeoutMs: undefined,
   cachedGroupMetadata: (jid) => globalThis.conn?.chats?.[jid] ?? {},
   version: await (0, import('@whiskeysockets/baileys')).fetchLatestBaileysVersion(),
@@ -251,24 +244,6 @@ global.reloadHandler = async (restatConn) => {
 process.on('uncaughtException', console.error)
 process.on('unhandledRejection', (reason) => { console.error("⚠ Rechazo no manejado:", reason) })
 
-// SubBots de Sasuke (Comentado para simplificar)
-/*global.rutaJadiBot = join(__dirname, `./jadi`)
-global.SasukeJadibts = true
-if (global.SasukeJadibts) {
-  if (!existsSync(global.rutaJadiBot)) { mkdirSync(global.rutaJadiBot, { recursive: true }); console.log(chalk.bold.cyan(`✓ Carpeta jadi creada`)) }
-  const readRutaJadiBot = readdirSync(global.rutaJadiBot)
-  if (readRutaJadiBot.length > 0) {
-    const creds = 'creds.json'
-    for (const gjbts of readRutaJadiBot) {
-      const botPath = join(global.rutaJadiBot, gjbts)
-      const readBotPath = readdirSync(botPath)
-      if (readBotPath.includes(creds)) {
-        SasukeJadiBot({ pathSasukeJadiBot: botPath, m: null, conn, args: '', usedPrefix: '/', command: 'serbot' })
-      }
-    }
-  }
-}*/
-
 // Carga de plugins
 const pluginFolders = ['./plugins']
 const pluginFilter = filename => /\.js$/.test(filename)
@@ -282,7 +257,7 @@ async function filesInit() {
   const folderStats = {}
 
   for (const folder of pluginFolders) {
-    const folderPath = join(__dirname, folder)
+    const folderPath = join(__dirnameFile, folder)
     if (!existsSync(folderPath)) { console.log(chalk.gray(`⚠ ${folder} no existe`)); continue }
     folderStats[folder] = 0
     const files = readdirSync(folderPath).filter(pluginFilter)
@@ -305,7 +280,7 @@ global.reload = async (_ev, filename) => {
   if (!pluginFilter(filename)) return
   let dir
   for (const folder of pluginFolders) {
-    const possiblePath = join(__dirname, folder, filename)
+    const possiblePath = join(__dirnameFile, folder, filename)
     if (existsSync(possiblePath)) { dir = possiblePath; break }
   }
 
@@ -323,7 +298,7 @@ global.reload = async (_ev, filename) => {
 
 // Watcher de plugins
 for (const folder of pluginFolders) {
-  const pluginPath = join(__dirname, folder)
+  const pluginPath = join(__dirnameFile, folder)
   if (existsSync(pluginPath)) { watch(pluginPath, async (eventType, filename) => { if (filename) await global.reload(null, filename) }) }
 }
 
