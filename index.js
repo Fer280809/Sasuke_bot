@@ -91,14 +91,41 @@ class JSONFileSync {
 
 // Base de datos con compatibilidad
 const dbPath = 'database.json'
-let adapter
-try {
-  adapter = new JSONFile(dbPath)
-} catch {
-  adapter = new JSONFileSync(dbPath)
+
+// Datos por defecto para la base de datos
+const defaultData = {
+  users: {},
+  chats: {},
+  settings: {},
+  gacha: { 
+    personajes: [], 
+    probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } 
+  },
+  config: { 
+    prefix: '!', 
+    owner: '5214181450063', 
+    botName: 'Sasuke Bot' 
+  }
 }
 
-global.db = new Low(adapter)
+// Crear adaptador según versión de lowdb
+let adapter
+try {
+  // lowdb v6+ requiere pasar defaultData en el constructor
+  adapter = new JSONFile(dbPath)
+  global.db = new Low(adapter, defaultData)
+} catch (error) {
+  // Fallback para versiones anteriores
+  try {
+    adapter = new JSONFileSync(dbPath)
+    global.db = new Low(adapter)
+  } catch {
+    // Si todo falla, usar adaptador simple
+    adapter = new JSONFileSync(dbPath)
+    global.db = { data: defaultData, read: async () => {}, write: async () => {} }
+  }
+}
+
 global.DATABASE = global.db
 
 global.loadDatabase = async function loadDatabase() {
@@ -112,23 +139,39 @@ global.loadDatabase = async function loadDatabase() {
   }
   if (global.db.data !== null) return
   global.db.READ = true
-  await global.db.read().catch(console.error)
-  global.db.READ = null
-  global.db.data = global.db.data || {
-    users: {},
-    chats: {},
-    settings: {},
-    gacha: { 
-      personajes: [], 
-      probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } 
-    },
-    config: { 
-      prefix: '!', 
-      owner: '5214181450063', 
-      botName: 'Sasuke Bot' 
-    }
+  
+  try {
+    await global.db.read()
+  } catch (error) {
+    console.log(chalk.yellow('⚠ Creando nueva base de datos...'))
   }
+  
+  global.db.READ = null
+  
+  // Asegurar que existan todos los datos por defecto
+  global.db.data = global.db.data || defaultData
+  global.db.data.users = global.db.data.users || {}
+  global.db.data.chats = global.db.data.chats || {}
+  global.db.data.settings = global.db.data.settings || {}
+  global.db.data.gacha = global.db.data.gacha || { 
+    personajes: [], 
+    probabilidades: { comun: 70, raro: 20, epic: 8, legendario: 2 } 
+  }
+  global.db.data.config = global.db.data.config || { 
+    prefix: '!', 
+    owner: '5214181450063', 
+    botName: 'Sasuke Bot' 
+  }
+  
   global.db.chain = chain(global.db.data)
+  
+  // Guardar datos iniciales
+  try {
+    await global.db.write()
+    console.log(chalk.green('✓ Base de datos inicializada'))
+  } catch (error) {
+    console.log(chalk.red('❌ Error al guardar BD:', error.message))
+  }
 }
 loadDatabase()
 
