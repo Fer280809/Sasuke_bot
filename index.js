@@ -10,7 +10,7 @@ import fs, { readdirSync, statSync, unlinkSync, existsSync, mkdirSync, readFileS
 import yargs from 'yargs'
 import { spawn } from 'child_process'
 import lodash from 'lodash'
-import { SasukeJadiBot } from './plugins/sockets-serbot.js'
+import { SasukeJadiBot } from './plugins/sockets-serbot.js' // Se mantiene porque es el nombre de la función en el plugin
 import chalk from 'chalk'
 import syntaxerror from 'syntax-error'
 import pino from 'pino'
@@ -34,8 +34,8 @@ const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
 
 // Ajuste: Definir carpeta de sesiones
 const sessions = 'Sessions/Principal'
-// Ajuste: Definir carpeta jadi (para subbots) - si no la tienes, dejar así
-const jadi = 'jadi'
+// Ajuste: Cambiado "jadi" por "sasuke" para subbots
+const sasuke = 'sasuke'
 
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
@@ -275,21 +275,21 @@ process.on('unhandledRejection', (reason) => {
   console.error("⚠ Rechazo no manejado:", reason)
 })
 
-// SubBots
-global.rutaJadiBot = join(__dirname, `${jadi}`)
-if (global.AstaJadibts) {
-  if (!existsSync(global.rutaJadiBot)) {
-    mkdirSync(global.rutaJadiBot, { recursive: true })
-    console.log(chalk.bold.cyan(`✓ Carpeta ${jadi} creada`))
+// SubBots - TODAS LAS REFERENCIAS A AstaJadi CAMBIADAS A Sasuke
+global.rutaSasukeBot = join(__dirname, `${sasuke}`)
+if (global.SasukeSasukeBts) { // Cambiado AstaJadibts por SasukeSasukeBts (coherente)
+  if (!existsSync(global.rutaSasukeBot)) {
+    mkdirSync(global.rutaSasukeBot, { recursive: true })
+    console.log(chalk.bold.cyan(`✓ Carpeta ${sasuke} creada`))
   }
-  const readRutaJadiBot = readdirSync(rutaJadiBot)
-  if (readRutaJadiBot.length > 0) {
+  const readRutaSasukeBot = readdirSync(rutaSasukeBot)
+  if (readRutaSasukeBot.length > 0) {
     const creds = 'creds.json'
-    for (const gjbts of readRutaJadiBot) {
-      const botPath = join(rutaJadiBot, gjbts)
+    for (const gsbts of readRutaSasukeBot) { // Cambiado gjbts por gsbts (Sasuke Bot)
+      const botPath = join(rutaSasukeBot, gsbts)
       const readBotPath = readdirSync(botPath)
       if (readBotPath.includes(creds)) {
-        AstaJadiBot({ pathAstaJadiBot: botPath, m: null, conn, args: '', usedPrefix: '/', command: 'serbot' })
+        SasukeJadiBot({ pathSasukeJadiBot: botPath, m: null, conn, args: '', usedPrefix: '/', command: 'serbot' }) // Ajustado path
       }
     }
   }
@@ -348,17 +348,4 @@ async function filesInit() {
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
   console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
-}
-
-filesInit().catch(console.error)
-
-// Recarga optimizada de plugins
-global.reload = async (_ev, filename) => {
-  if (!pluginFilter(filename)) return
-
-  for (const folder of pluginFolders) {
-    const folderPath = join(__dirname, folder)
-    if (!existsSync(folderPath)) continue
-
-    const dir = global.__filename(join(folderPath, filename),
+  console.log(chalk.bold.red(`╚═══════════════════════════════════
