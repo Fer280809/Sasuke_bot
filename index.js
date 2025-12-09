@@ -37,6 +37,16 @@ const sessions = 'Sessions/Principal'
 // Ajuste: Definir carpeta jadi (para subbots) - si no la tienes, dejar así
 const jadi = 'jadi'
 
+// ARREGLADO: Función isValidPhoneNumber usando google-libphonenumber
+async function isValidPhoneNumber(phoneNumber) {
+  try {
+    const number = phoneUtil.parseAndKeepRawInput(phoneNumber)
+    return phoneUtil.isValidNumber(number)
+  } catch {
+    return false
+  }
+}
+
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
 say('SASUKE BOT', {
@@ -347,10 +357,4 @@ async function filesInit() {
   }
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
-}
-
-filesInit().catch(console.error)
-
-// Recarga optimizada de plugins - COMPLETA Y
+  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS 
