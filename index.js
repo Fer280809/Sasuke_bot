@@ -14,11 +14,11 @@ import path, { join, dirname } from 'path'
 import { Boom } from '@hapi/boom'
 import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
-import { JSONFile from 'lowdb/node'
+import { JSONFile } from 'lowdb/node' // Importación corregida
 import pkg from 'google-libphonenumber'
 const { PhoneNumberUtil } = pkg
 const phoneUtil = PhoneNumberUtil.getInstance()
-import baileys from '@whiskeysockets/baileys' // Importar el módulo completo
+import baileys from '@whiskeysockets/baileys'
 import readline from 'readline'
 
 // Importar dns y forzar IPv4
@@ -81,7 +81,7 @@ async function isValidPhoneNumber(number) {
     if (phoneUtil.isValidNumber(parsedNumber)) { console.log(chalk.green(`✓ [isValidPhoneNumber] Número válido: +${cleanNumber}`)); return cleanNumber }
     console.log(chalk.red(`❌ [isValidPhoneNumber] Número no reconocido. Formato esperado:`));
     console.log(chalk.cyan(`   México: 5214181450063 (52 + 1 + 10 dígitos)`));
-    console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos, se agregará el 1)`));
+    console.log(chalk.cyan(`   O bien: 524181450063 (52 + 10 dígitos)`));
     return false
   } catch (e) { console.log(chalk.red(`❌ [isValidPhoneNumber] Error: ${e.message}`)); return false }
 }
@@ -92,7 +92,7 @@ const connectionOptions = {
   printQRInTerminal: process.argv.includes("qr"),
   mobile: process.argv.includes("mobile"),
   browser: ["Chrome (Linux)", "", ""],
-  auth: { creds: state.creds, keys: baileys.makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })) }, // Usar baileys.
+  auth: { creds: state.creds, keys: baileys.makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })) },
   markOnlineOnConnect: false,
   generateHighQualityLinkPreview: true,
   syncFullHistory: false,
@@ -171,7 +171,7 @@ async function connectionUpdate(update) {
   global.stopped = connection
   if (isNewLogin) conn.isInit = true
   const code = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.output?.payload?.statusCode
-  if (code && code !== baileys.DisconnectReason.loggedOut && conn?.ws.socket == null) { await global.reloadHandler(true).catch(console.error); global.timestamp.connect = new Date } // Usar baileys.
+  if (code && code !== baileys.DisconnectReason.loggedOut && conn?.ws.socket == null) { await global.reloadHandler(true).catch(console.error); global.timestamp.connect = new Date }
   if (global.db.data == null) loadDatabase()
   if (qr != 0 && qr != undefined || process.argv.includes("qr")) { if (process.argv.includes("qr")) console.log(chalk.red.bold(`[ 📱 ] Escanea este código QR de Sasuke`)) }
   if (connection === "open") {
@@ -186,134 +186,4 @@ async function connectionUpdate(update) {
     conn.ev.on('messages.upsert', async m => {
       const msg = m.messages[0]
       if (!msg.key.fromMe && msg.key.remoteJid !== 'status@broadcast') {
-        const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.listResponseMessage?.singleSelectReply?.selectedRowText || msg.message?.buttonsResponseMessage?.selectedButtonId || ''
-        const chatId = msg.key.remoteJid
-        console.log('Recibido:', texto, 'de', chatId)
-        if (texto.startsWith(global.prefix)) {
-          const command = texto.slice(global.prefix.length).trim().split(' ')[0].toLowerCase()
-          const args = texto.slice(global.prefix.length).trim().split(' ').slice(1)
-          switch (command) {
-            case 'ping': await conn.sendMessage(chatId, { text: 'Pong!' }); break
-            case 'ayuda':
-              const helpMessage = `Comandos disponibles:\n${global.prefix}ping - Responde con "Pong!".\n${global.prefix}info - Muestra información del bot.\n${global.prefix}ayuda - Muestra este mensaje de ayuda.`
-              await conn.sendMessage(chatId, { text: helpMessage }); break
-            case 'info':
-              const infoMessage = `Bot de WhatsApp creado con Baileys.\nDesarrollado por [Tu Nombre/Organización].`
-              await conn.sendMessage(chatId, { text: infoMessage }); break
-            default: await conn.sendMessage(chatId, { text: `Comando desconocido. Usa ${global.prefix}ayuda para ver la lista de comandos.` })
-          }
-        }
-      }
-    })
-  }
-  let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-  if (connection === "close") {
-    if ([401, 440, 428, 405].includes(reason)) console.log(chalk.red(`⚠ (${code}) › Sesión cerrada.`))
-    console.log(chalk.yellow("⟳ Reconectando Sasuke Bot..."))
-    await global.reloadHandler(true).catch(console.error)
-  }
-}
-
-// Recarga de handler
-global.reloadHandler = async (restatConn) => {
-  try {
-    const Handler = await import(`./handler.js?update=${Date.now()}`).catch(console.error)
-    if (Object.keys(Handler || {}).length) global.handler = Handler
-  } catch (e) { console.error(e) }
-  if (restatConn) {
-    const oldChats = global.conn.chats
-    try { global.conn.ws.close() } catch {}
-    conn.ev.removeAllListeners()
-    global.conn = makeWASocket(connectionOptions, { chats: oldChats })
-    global.isInit = true
-  }
-  conn.ev.off('messages.upsert', global.conn.handler)
-  conn.ev.off('connection.update', connectionUpdate)
-  conn.ev.off('creds.update', saveCreds)
-  conn.handler = global.handler?.handler?.bind(global.conn)
-  conn.connectionUpdate = connectionUpdate.bind(global.conn)
-  conn.credsUpdate = saveCreds.bind(global.conn, true)
-  conn.ev.on('messages.upsert', global.conn.handler)
-  conn.ev.on('connection.update', connectionUpdate)
-  conn.ev.on('creds.update', saveCreds)
-  global.isInit = false
-  return true
-}
-
-// Manejo de errores
-process.on('uncaughtException', console.error)
-process.on('unhandledRejection', (reason) => { console.error("⚠ Rechazo no manejado:", reason) })
-
-// Carga de plugins
-const pluginFolders = ['./plugins']
-const pluginFilter = filename => /\.js$/.test(filename)
-global.plugins = {}
-
-async function filesInit() {
-  console.log(chalk.bold.red('\n╔═══════════════════════════════════╗'))
-  console.log(chalk.bold.red('║      CARGANDO PLUGINS...          ║'))
-  console.log(chalk.bold.red('╚═══════════════════════════════════╝\n'))
-  const allLoadPromises = []
-  const folderStats = {}
-
-  for (const folder of pluginFolders) {
-    const folderPath = join(__dirnameFile, folder)
-    if (!existsSync(folderPath)) { console.log(chalk.gray(`⚠ ${folder} no existe`)); continue }
-    folderStats[folder] = 0
-    const files = readdirSync(folderPath).filter(pluginFilter)
-    for (const filename of files) {
-      const file = (0, pathToFileURL)(join(folderPath, filename))
-      allLoadPromises.push(import(file).then(module => { global.plugins[filename] = module.default || module; folderStats[folder]++; return { folder, filename, success: true } }).catch(e => { console.error(chalk.red(`❌ ${folder}/${filename}: ${e.message}`)); delete global.plugins[filename]; return { folder, filename, success: false } }))
-    }
-  }
-
-  await Promise.all(allLoadPromises)
-  let total = 0
-  for (const [folder, count] of Object.entries(folderStats)) { if (count > 0) { console.log(chalk.green(`✓ ${folder}: ${count} plugins`)); total += count } }
-  console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
-  console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS CARGADOS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
-}
-
-// Recarga de plugins
-global.reload = async (_ev, filename) => {
-  if (!pluginFilter(filename)) return
-  let dir
-  for (const folder of pluginFolders) {
-    const possiblePath = join(__dirnameFile, folder, filename)
-    if (existsSync(possiblePath)) { dir = possiblePath; break }
-  }
-
-  if (!dir) return
-  if (filename in global.plugins) {
-    if (existsSync(dir)) {
-      console.log(chalk.yellow(`♻ Recargando plugin: ${filename}`))
-      try { const module = await import((0, pathToFileURL)(dir)); global.plugins[filename] = module.default || module; console.log(chalk.green(`✓ Plugin recargado: ${filename}`)) } catch (e) { console.error(chalk.red(`❌ Error al recargar ${filename}:`), e); delete global.plugins[filename] }
-    } else { console.log(chalk.red(`🗑 Plugin eliminado: ${filename}`)); delete global.plugins[filename] }
-  } else {
-    console.log(chalk.blue(`➕ Nuevo plugin detectado: ${filename}`))
-    try { const module = await import((0, pathToFileURL)(dir)); global.plugins[filename] = module.default || module; console.log(chalk.green(`✓ Plugin cargado: ${filename}`)) } catch (e) { console.error(chalk.red(`❌ Error al cargar ${filename}:`), e) }
-  }
-}
-
-// Watcher de plugins
-for (const folder of pluginFolders) {
-  const pluginPath = join(__dirnameFile, folder)
-  if (existsSync(pluginPath)) { watch(pluginPath, async (eventType, filename) => { if (filename) await global.reload(null, filename) }) }
-}
-
-// Inicialización final
-async function startBot() {
-  if (!global.handler || !global.handler.handler) { console.error(chalk.red('❌ Error: handler no disponible')); return }
-  try { conn.ev.off('messages.upsert', global.conn.handler); conn.ev.off('connection.update', connectionUpdate); conn.ev.off('creds.update', saveCreds) } catch {}
-  conn.handler = global.handler.handler.bind(global.conn)
-  conn.connectionUpdate = connectionUpdate.bind(global.conn)
-  conn.credsUpdate = saveCreds.bind(global.conn, true)
-  conn.ev.on('messages.upsert', global.conn.handler)
-  conn.ev.on('connection.update', connectionUpdate)
-  conn.ev.on('creds.update', saveCreds)
-  console.log(chalk.bold.green('\n🚀 SASUKE BOT INICIADO CORRECTAMENTE\n'))
-}
-
-// Iniciar el bot
-filesInit().then(startBot).catch(console.error)
+        const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.listResponseMessage?.singleSelectReply
