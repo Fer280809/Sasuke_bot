@@ -35,7 +35,7 @@ const sessions = 'Sessions/Principal'
 const jadi = 'jadi'
 const phoneUtil = PhoneNumberUtil.getInstance()
 
-// ARREGLADO: Validación SUPER SIMPLE y efectiva para números mexicanos (SIN EJEMPLO)
+// Validación SUPER SIMPLE y efectiva para números mexicanos
 // Acepta: 5214181450063 o 524181450063 (solo 11 o 12 dígitos, empieza con 52)
 function isValidPhoneNumber(phoneNumber) {
   const cleanNumber = phoneNumber.replace(/\D/g, '') // Quita todo lo que no sea número
@@ -127,7 +127,7 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 conn.ev.on("creds.update", saveCreds)
 
-// Proceso de código de paring - listo y sin ejemplo
+// Proceso de código de paring - AÑADE "521"
 if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) {
   if (!conn.authState.creds.registered) {
     // Pregunta sin ejemplo
@@ -155,13 +155,17 @@ if (!fs.existsSync(`${sessions}/creds.json`) && (opcion === '2' || methodCode)) 
 
     try {
       const cleanNumber = phoneNumber.replace(/\D/g, '')
-      // Normaliza a 12 dígitos (con 1 intermedio) si es necesario
-      const normalizedNumber = cleanNumber.length === 11 ? `521${cleanNumber.slice(2)}` : cleanNumber
-      const codeBot = await conn.requestPairingCode(normalizedNumber)
+      // **AÑADE "521"**: Agregamos "521" al número
+      const codeBot = await conn.requestPairingCode(`521${cleanNumber.slice(2)}`)
       console.log(chalk.bold.white(chalk.bgRed(`[ 🔑 ] Código Sasuke: `)), chalk.bold.white(codeBot.match(/.{1,4}/g)?.join("-") || codeBot))
     } catch (e) {
       console.error(chalk.red(`⚠ Error al pedir el código: ${e.message}`))
-      console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) si el problema persiste`))
+      // Mensaje más específico si falla el pairing
+      if (e.message.includes('Connection Closed')) {
+        console.log(chalk.red(`❌ Falló la conexión con WhatsApp - revisa tu internet`))
+      } else {
+        console.log(chalk.cyan(`💡 Prueba con la opción 1 (código QR) si el problema persiste`))
+      }
     }
   }
 }
@@ -252,7 +256,7 @@ global.plugins = {}
 async function filesInit() {
   console.log(chalk.bold.red('\n╔═══════════════════════════════════╗'))
   console.log(chalk.bold.red('║      CARGANDO PLUGINS...          ║'))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
+  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n'))
 
   let total = 0
   for (const folder of pluginFolders) {
