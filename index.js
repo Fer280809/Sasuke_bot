@@ -20,7 +20,9 @@ import { makeWASocket, protoType, serialize } from './lib/simple.js'
 import { Low } from 'lowdb'
 import { JSONFile } from 'lowdb/node'
 import { proto } from '@whiskeysockets/baileys'
-import { PhoneNumberUtil } from 'google-libphonenumber'
+// ARREGLADO: Importación de google-libphonenumber (CommonJS)
+import pkgPhone from 'google-libphonenumber'
+const { PhoneNumberUtil } = pkgPhone
 import { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } from '@whiskeysockets/baileys'
 import readline from 'readline'
 import NodeCache from 'node-cache'
