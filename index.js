@@ -10,7 +10,7 @@ import fs, { readdirSync, statSync, unlinkSync, existsSync, mkdirSync, readFileS
 import yargs from 'yargs'
 import { spawn } from 'child_process'
 import lodash from 'lodash'
-import { SasukeJadiBot } from './plugins/sockets-serbot.js' // Se mantiene porque es el nombre de la función en el plugin
+import { SasukeJadiBot } from './plugins/sockets-serbot.js'
 import chalk from 'chalk'
 import syntaxerror from 'syntax-error'
 import pino from 'pino'
@@ -32,10 +32,8 @@ const { CONNECTING } = ws
 const { chain } = lodash
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
 
-// Ajuste: Definir carpeta de sesiones
 const sessions = 'Sessions/Principal'
-// Ajuste: Cambiado "jadi" por "sasuke" para subbots
-const sasuke = 'sasuke'
+const jadi = 'jadi'
 
 let { say } = cfonts
 console.log(chalk.red('\n⚡ Iniciando Sistema...'))
@@ -73,10 +71,8 @@ const __dirname = global.__dirname(import.meta.url)
 global.opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse())
 global.prefix = new RegExp('^[#!./-]')
 
-// Base de datos optimizada (ARREGLADA - LowDB v7.x compatible)
 const dbAdapter = /https?:\/\//.test(opts['db'] || '') ? new cloudDBAdapter(opts['db']) : new JSONFile('database.json')
 
-// DATOS POR DEFECTO REQUERIDOS POR LOWDB v7.x - CAMBIA TU NÚMERO AQUÍ
 const defaultDBData = {
   users: {},
   chats: {},
@@ -131,7 +127,6 @@ if (!methodCodeQR && !methodCode && !fs.existsSync(`${sessions}/creds.json`)) {
 
 console.info = () => {}
 
-// Opciones de conexión optimizadas (ARREGLADA - sin store.loadMessage)
 const connectionOptions = {
   logger: pino({ level: 'silent' }),
   printQRInTerminal: opcion == '1' ? true : methodCodeQR ? true : false,
@@ -147,7 +142,7 @@ const connectionOptions = {
   getMessage: async (key) => {
     try {
       let jid = jidNormalizedUser(key.remoteJid)
-      return "" // Baileys maneja el mensaje faltante automáticamente
+      return ""
     } catch {
       return ""
     }
@@ -275,27 +270,26 @@ process.on('unhandledRejection', (reason) => {
   console.error("⚠ Rechazo no manejado:", reason)
 })
 
-// SubBots - TODAS LAS REFERENCIAS A AstaJadi CAMBIADAS A Sasuke
-global.rutaSasukeBot = join(__dirname, `${sasuke}`)
-if (global.SasukeSasukeBts) { // Cambiado AstaJadibts por SasukeSasukeBts (coherente)
-  if (!existsSync(global.rutaSasukeBot)) {
-    mkdirSync(global.rutaSasukeBot, { recursive: true })
-    console.log(chalk.bold.cyan(`✓ Carpeta ${sasuke} creada`))
+// SUBBOTS: REGRESADO A ORIGINAL (solo quitado "Asta" de AstaJadibts)
+global.rutaJadiBot = join(__dirname, `${jadi}`)
+if (global.Jadibts) {
+  if (!existsSync(global.rutaJadiBot)) {
+    mkdirSync(global.rutaJadiBot, { recursive: true })
+    console.log(chalk.bold.cyan(`✓ Carpeta ${jadi} creada`))
   }
-  const readRutaSasukeBot = readdirSync(rutaSasukeBot)
-  if (readRutaSasukeBot.length > 0) {
+  const readRutaJadiBot = readdirSync(rutaJadiBot)
+  if (readRutaJadiBot.length > 0) {
     const creds = 'creds.json'
-    for (const gsbts of readRutaSasukeBot) { // Cambiado gjbts por gsbts (Sasuke Bot)
-      const botPath = join(rutaSasukeBot, gsbts)
+    for (const gjbts of readRutaJadiBot) {
+      const botPath = join(rutaJadiBot, gjbts)
       const readBotPath = readdirSync(botPath)
       if (readBotPath.includes(creds)) {
-        SasukeJadiBot({ pathSasukeJadiBot: botPath, m: null, conn, args: '', usedPrefix: '/', command: 'serbot' }) // Ajustado path
+        SasukeJadiBot({ pathAstaJadiBot: botPath, m: null, conn, args: '', usedPrefix: '/', command: 'serbot' })
       }
     }
   }
 }
 
-// Sistema de carga de plugins OPTIMIZADO - 5 Carpetas
 const pluginFolders = ['./plugins', './plugins2', './plugins3', './plugins4', './plugins5']
 const pluginFilter = filename => /\.js$/.test(filename)
 global.plugins = {}
@@ -348,4 +342,32 @@ async function filesInit() {
 
   console.log(chalk.bold.red(`\n╔═══════════════════════════════════╗`))
   console.log(chalk.bold.red(`║  🔥 TOTAL: ${total} PLUGINS 🔥  ║`))
-  console.log(chalk.bold.red(`╚═══════════════════════════════════
+  console.log(chalk.bold.red(`╚═══════════════════════════════════╝\n`))
+}
+
+filesInit().catch(console.error)
+
+global.reload = async (_ev, filename) => {
+  if (!pluginFilter(filename)) return
+
+  for (const folder of pluginFolders) {
+    const folderPath = join(__dirname, folder)
+    if (!existsSync(folderPath)) continue
+
+    const dir = global.__filename(join(folderPath, filename), true)
+
+    if (existsSync(dir)) {
+      const isUpdate = filename in global.plugins
+
+      if (isUpdate) {
+        console.log(chalk.yellow(`⟳ ${folder}/${filename}`))
+      } else {
+        console.log(chalk.green(`✨ ${folder}/${filename}`))
+      }
+
+      const err = syntaxerror(readFileSync(dir), filename, {
+        sourceType: 'module',
+        allowAwaitOutsideFunction: true,
+      })
+
+      if (
